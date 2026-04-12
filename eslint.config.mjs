@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated PWA bundles are emitted into public/ during production builds.
+    "public/sw*.js",
+    "public/sw*.js.map",
+    "public/workbox-*.js",
+    "public/workbox-*.js.map",
   ]),
 ]);
 

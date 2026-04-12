@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-heading: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,73 +48,101 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * ══════════════════════════════════════════════════════════
+ * CashFlowIQ — Surgical Precision Theme
+ *
+ * Design rules:
+ *   Color is DATA, not decoration.
+ *   Green #059669 = good. Red #DC2626 = stop.
+ *   Amber #D97706 = attention. Blue #2563EB = interactive.
+ *   Everything else is monochrome slate.
+ *   4px grid. No gradients. No shadows. No purple.
+ *   Inter for UI. IBM Plex Mono for numbers.
+ *   80ms hover transitions. 150ms toggle slides.
+ * ══════════════════════════════════════════════════════════
+ */
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #FCFCFD;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F172A;
+  --primary: #0F172A;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F8FAFC;
+  --secondary-foreground: #0F172A;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #059669;
+  --accent-foreground: #FFFFFF;
+  --destructive: #DC2626;
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #2563EB;
+  --chart-1: #059669;
+  --chart-2: #2563EB;
+  --chart-3: #D97706;
+  --chart-4: #0F172A;
+  --chart-5: #64748B;
+  --radius: 6px;
+
+  /* Sidebar — slightly off-white, not dark */
+  --sidebar: #F8FAFC;
+  --sidebar-foreground: #0F172A;
+  --sidebar-primary: #059669;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F1F5F9;
+  --sidebar-accent-foreground: #0F172A;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #2563EB;
+
+  /* Semantic financial colors */
+  --cfiq-green: #059669;
+  --cfiq-green-bg: #ECFDF5;
+  --cfiq-red: #DC2626;
+  --cfiq-red-bg: #FEF2F2;
+  --cfiq-amber: #D97706;
+  --cfiq-amber-bg: #FFFBEB;
+  --cfiq-blue: #2563EB;
+  --cfiq-blue-bg: #EFF6FF;
 }
 
+/* No dark mode — this is a professional tool, not a consumer app */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #FCFCFD;
+  --foreground: #0F172A;
+  --card: #FFFFFF;
+  --card-foreground: #0F172A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F172A;
+  --primary: #0F172A;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F8FAFC;
+  --secondary-foreground: #0F172A;
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
+  --accent: #059669;
+  --accent-foreground: #FFFFFF;
+  --destructive: #DC2626;
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #2563EB;
+  --chart-1: #059669;
+  --chart-2: #2563EB;
+  --chart-3: #D97706;
+  --chart-4: #0F172A;
+  --chart-5: #64748B;
+  --sidebar: #F8FAFC;
+  --sidebar-foreground: #0F172A;
+  --sidebar-primary: #059669;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F1F5F9;
+  --sidebar-accent-foreground: #0F172A;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #2563EB;
 }
 
 @layer base {
@@ -123,8 +151,208 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 14px;
+    line-height: 1.5;
   }
   html {
     @apply font-sans;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+}
+
+/* ── Semantic Financial Colors ── */
+@layer utilities {
+  .text-positive { color: #059669; }
+  .text-negative { color: #DC2626; }
+  .text-warning  { color: #D97706; }
+  .text-info     { color: #2563EB; }
+
+  .bg-positive-subtle { background: #ECFDF5; }
+  .bg-negative-subtle { background: #FEF2F2; }
+  .bg-warning-subtle  { background: #FFFBEB; }
+  .bg-info-subtle     { background: #EFF6FF; }
+}
+
+/* ── Number Typography ── */
+/* Every number in the app uses IBM Plex Mono for perfect tabular alignment */
+.font-num,
+.tabular-nums {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ── Status Health Dots ── */
+/* 8px circles, 2px glow at 20% opacity. Triage in 3 seconds. */
+.health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.health-dot-green {
+  background: #059669;
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.20);
+}
+.health-dot-amber {
+  background: #D97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.20);
+}
+.health-dot-red {
+  background: #DC2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.20);
+}
+
+/* ── Physics-Based Interactions ── */
+/* 80ms hover — fast enough to feel instant, slow enough to feel intentional */
+.hover-row {
+  transition: background-color 80ms ease;
+}
+.hover-row:hover {
+  background-color: #FCFCFD;
+}
+
+/* Button press — 0.5px down, like pressing a real switch */
+.btn-press:active {
+  transform: translateY(0.5px);
+}
+
+/* Toggle knob — 12px slide in 150ms ease-out */
+.toggle-knob {
+  transition: transform 150ms ease-out;
+}
+
+/* ── Sidebar ── */
+.sidebar-transition {
+  transition: width 200ms ease, padding 200ms ease, opacity 150ms ease,
+              margin 200ms ease, left 200ms ease;
+}
+
+/* ── Expert-Density Labels ── */
+/* 11px uppercase, tracking 0.03em — dense but not cramped */
+.label-xs {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748B;
+}
+
+/* ── Financial Table ── */
+/* 12.5px text, 6px padding, mathematical whitespace */
+.fin-table {
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.fin-table th {
+  padding: 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748B;
+  border-bottom: 1px solid #E5E7EB;
+  text-align: right;
+}
+.fin-table th:first-child {
+  text-align: left;
+}
+.fin-table td {
+  padding: 6px;
+  text-align: right;
+  font-family: "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+}
+.fin-table td:first-child {
+  text-align: left;
+  font-family: inherit;
+  color: #0F172A;
+}
+.fin-table tr {
+  border-bottom: 1px solid #F1F5F9;
+  transition: background-color 80ms ease;
+}
+.fin-table tbody tr:hover {
+  background-color: #FCFCFD;
+}
+
+/* ── Card Surface ── */
+/* Barely-there #FCFCFD background, 1px borders, no shadows */
+.surface {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  transition: border-color 80ms ease;
+}
+.surface:hover {
+  border-color: #D1D5DB;
+}
+
+/* ── Balance Check Indicator ── */
+/* Always visible in sidebar, 11.5px — proof, not a feature */
+.balance-check {
+  font-size: 11.5px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #64748B;
+  line-height: 1.5;
+}
+
+/* ── Scrollbar ── */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 2px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* ── Subtle Page Transition ── */
+.page-transition {
+  animation: fadeIn 200ms ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Input Styling ── */
+.surface-input {
+  @apply w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-foreground outline-none;
+  @apply placeholder:text-muted-foreground;
+  @apply focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20;
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+
+.surface-select {
+  @apply w-full appearance-none rounded-md border border-border bg-white px-3 py-2 text-sm text-foreground outline-none;
+  @apply focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20;
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+
+/* ── Respect Motion Preferences ── */
+@media (prefers-reduced-motion: reduce) {
+  .page-transition,
+  .hover-row,
+  .sidebar-transition,
+  .toggle-knob {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── Recharts tooltip override ── */
+.recharts-tooltip-wrapper {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.08));
 }

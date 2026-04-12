@@ -1,0 +1,5 @@
+event_type,entity_type,counterparty,document_number,document_date,due_date,expected_cash_date,gross_amount_inr,tax_amount_inr,tds_amount_inr,is_msme,status,notes
+inflow,invoice,Sharma Retail,INV-2026-001,2026-04-01,2026-04-10,2026-04-10,850000,0,0,false,open,Primary customer collection
+inflow,invoice,Mumbai Distributors,INV-2026-002,2026-04-02,2026-04-18,2026-04-18,640000,0,0,false,open,Second customer collection
+outflow,bill,Apex Steel,BILL-2026-001,2026-04-03,2026-04-12,2026-04-12,420000,0,0,true,open,MSME raw material purchase
+outflow,bill,Galaxy Logistics,BILL-2026-002,2026-04-04,2026-04-20,2026-04-20,175000,0,0,false,open,Transport vendor payment

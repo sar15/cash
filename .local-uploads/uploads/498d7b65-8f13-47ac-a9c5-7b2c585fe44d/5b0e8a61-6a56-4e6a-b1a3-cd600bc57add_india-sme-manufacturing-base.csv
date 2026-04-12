@@ -1,0 +1,15 @@
+event_type,entity_type,counterparty,document_number,document_date,due_date,expected_cash_date,gross_amount_inr,tax_amount_inr,tds_amount_inr,is_msme,status,notes
+inflow,invoice,Shakti Retail Distributors,INV-APR-101,2026-04-01,2026-04-09,2026-04-10,685000,0,0,false,open,Primary FMCG distributor collection
+inflow,invoice,Kaveri Meditech,INV-APR-102,2026-04-02,2026-04-14,2026-04-16,472500,0,9450,false,open,Hospital packaging invoice with TDS deduction
+inflow,invoice,Metro Wellness Hospitals,INV-APR-103,2026-04-03,2026-04-21,2026-04-24,825000,0,16500,false,open,Corporate hospital chain payment
+inflow,invoice,Southern Export Traders,INV-APR-104,2026-04-04,2026-04-28,2026-05-01,558000,0,0,false,open,Export-linked domestic supply
+outflow,bill,Apex Steel Components,BILL-APR-201,2026-03-28,2026-04-08,2026-04-08,396000,0,0,true,open,MSME vendor for fabricated steel frames
+outflow,bill,Sai Polymer Films,BILL-APR-202,2026-03-30,2026-04-12,2026-04-12,284500,0,0,true,open,MSME raw material vendor
+outflow,bill,Galaxy Logistics,BILL-APR-203,2026-04-02,2026-04-15,2026-04-15,118000,0,0,false,open,Outbound transport for April dispatches
+outflow,inventory,Raw Material Top-Up,INVTRY-APR-204,2026-04-05,2026-04-18,2026-04-18,225000,0,0,false,open,Additional resin purchase buffer
+outflow,gst,GST March Liability,GST-APR-205,2026-04-01,2026-04-20,2026-04-20,162000,162000,0,false,open,Monthly GST payment due on 20th
+outflow,tds,TDS March Deposit,TDS-APR-206,2026-04-01,2026-04-07,2026-04-07,28500,0,28500,false,open,TDS deposit due on 7th
+outflow,epf,EPF March Deposit,EPF-APR-207,2026-04-01,2026-04-15,2026-04-15,46200,0,0,false,open,EPF payment for factory and office staff
+outflow,payroll,April Payroll,PAY-APR-208,2026-04-01,2026-05-01,2026-05-01,328000,0,0,false,open,Monthly payroll for 24 employees
+outflow,emi,Term Loan EMI,EMI-APR-209,2026-04-01,2026-04-10,2026-04-10,96500,0,0,false,open,Machine finance EMI
+outflow,bill,PowerGrid Utilities,BILL-APR-210,2026-04-04,2026-04-17,2026-04-17,74200,0,0,false,open,Plant power charges
