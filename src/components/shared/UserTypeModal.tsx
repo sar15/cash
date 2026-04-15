@@ -174,13 +174,8 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
 
 /** Hook to get/set user type with localStorage */
 export function useUserType() {
-  const [userType, setType] = useState<UserType | null>(null)
-  const [hasChecked, setHasChecked] = useState(false)
-
-  useEffect(() => {
-    setType(getUserType())
-    setHasChecked(true)
-  }, [])
+  const [userType, setType] = useState<UserType | null>(() => getUserType())
+  const [hasChecked, setHasChecked] = useState(true)
 
   const selectType = (type: UserType) => {
     setUserType(type)

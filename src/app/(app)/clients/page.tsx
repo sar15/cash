@@ -273,7 +273,8 @@ export default function ClientsPage() {
                  <tbody className="divide-y divide-[#F1F5F9] bg-white">
                    {companies.map((company, index) => {
                      const isCrit = index < clientsAtRisk
-                     const runwayDisplay = isCrit ? `${(Math.random() * 2).toFixed(1)}m` : '8.4m'
+                     // Use a stable seed based on index to avoid impure Math.random() during render
+                     const runwayDisplay = isCrit ? `${((index % 3) * 0.7 + 0.3).toFixed(1)}m` : '8.4m'
                      
                      return (
                        <tr key={company.id} className="transition-colors hover:bg-[#F8FAFC]">
@@ -287,7 +288,7 @@ export default function ClientsPage() {
                            </div>
                          </td>
                          <td className="px-5 py-3.5 text-right font-num font-semibold text-[#334155]">
-                            {company.id === activeCompanyId && activeMetrics ? formatAuto(activeMetrics.cashPosition) : `₹${Math.floor(Math.random() * 90 + 10)}.0L`}
+                            {company.id === activeCompanyId && activeMetrics ? formatAuto(activeMetrics.cashPosition) : `₹${(index % 9) * 10 + 10}.0L`}
                          </td>
                          <td className={cn("px-5 py-3.5 text-right font-num font-semibold", isCrit ? "text-[#DC2626]" : "text-[#475569]")}>
                             {runwayDisplay}
