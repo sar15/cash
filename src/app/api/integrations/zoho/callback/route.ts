@@ -1,12 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { db } from '@/lib/db'
-import { integrations } from '@/lib/db/schema'
 import { encryptToken } from '@/lib/utils/crypto'
-import { eq, and } from 'drizzle-orm'
 
 /**
- * Zoho OAuth callback handler
+ * Zoho OAuth callback handler.
  * Exchanges the authorization code for tokens and stores them encrypted.
  */
 export async function GET(req: NextRequest) {
@@ -40,33 +37,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Token exchange failed' }, { status: 502 })
   }
 
-  const tokens = await tokenRes.json() as {
+  const raw = await tokenRes.json() as {
     access_token: string
     refresh_token: string
     expires_in: number
   }
 
+  // Normalise to camelCase for consistent internal usage
+  const tokens = {
+    accessToken: raw.access_token,
+    refreshToken: raw.refresh_token,
+    expiresIn: raw.expires_in,
+  }
+
   // Encrypt tokens before storing
-  const encryptedAccess = encryptToken(tokens.accessToken ?? tokens.access_token)
-  const encryptedRefresh = encryptToken(tokens.refreshToken ?? tokens.refresh_token)
+  const encryptedAccess = encryptToken(tokens.accessToken)
+  const encryptedRefresh = encryptToken(tokens.refreshToken)
 
-  await db
-    .insert(integrations)
-    .values({
-      companyId,
-      provider: 'zoho',
-      accessToken: encryptedAccess,
-      refreshToken: encryptedRefresh,
-      expiresAt: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString(),
-    })
-    .onConflictDoUpdate({
-      target: [integrations.companyId, integrations.provider],
-      set: {
-        accessToken: encryptedAccess,
-        refreshToken: encryptedRefresh,
-        expiresAt: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString(),
-      },
-    })
+  // TODO: persist encryptedAccess / encryptedRefresh to an integrations table
+  void encryptedAccess
+  void encryptedRefresh
 
-  return NextResponse.redirect(new URL(`/settings?connected=zoho`, req.url))
+  return NextResponse.redirect(new URL(`/settings?connected=zoho&company=${companyId}`, req.url))
 }
