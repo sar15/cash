@@ -17,7 +17,6 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  IndianRupee,
   GitCompareArrows,
   CalendarClock,
   Briefcase,

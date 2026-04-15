@@ -1,71 +1,13 @@
 "use client"
 
 import { UserButton } from "@clerk/nextjs"
-import { usePathname } from "next/navigation"
 import { useUIStore } from "@/stores/ui-store"
 import { cn } from "@/lib/utils"
-import { Building2, Menu, CheckCheck, Bell } from "lucide-react"
+import { Menu, CheckCheck, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useCompanyStore } from "@/stores/company-store"
-import { useUserType } from "@/components/shared/UserTypeModal"
 import { useEffect, useState, useRef } from "react"
 import { apiGet, apiPost } from "@/lib/api/client"
-
-const pageTitleMap: Record<string, { title: string; description: string }> = {
-  "/dashboard": {
-    title: "Dashboard",
-    description: "Cash position, runway, compliance at a glance",
-  },
-  "/forecast": {
-    title: "Forecast",
-    description: "P&L, balance sheet, and cash flow grid",
-  },
-  "/scenarios": {
-    title: "Scenarios",
-    description: "Stress-test assumptions before you commit",
-  },
-  "/compliance": {
-    title: "Compliance",
-    description: "GST, TDS, PF/ESI, advance tax tracking",
-  },
-  "/data": {
-    title: "Import",
-    description: "Upload, map, and publish financials",
-  },
-  "/reports": {
-    title: "Reports",
-    description: "Board-ready exports with your brand",
-  },
-  "/accounts": {
-    title: "Accounts",
-    description: "Chart of accounts and mapping",
-  },
-  "/settings": {
-    title: "Settings",
-    description: "Company profile and tax defaults",
-  },
-  "/clients": {
-    title: "Portfolio",
-    description: "Client overview for CA practice",
-  },
-  "/due-dates": {
-    title: "Due Dates",
-    description: "Cross-client compliance deadlines",
-  },
-}
-
-function getPageMeta(pathname: string) {
-  const match = Object.entries(pageTitleMap).find(([path]) =>
-    pathname === path || pathname.startsWith(`${path}/`)
-  )
-
-  return (
-    match?.[1] ?? {
-      title: "CashFlowIQ",
-      description: "Financial forecasting for Indian SMEs",
-    }
-  )
-}
 
 interface Notification {
   id: string
@@ -193,22 +135,10 @@ function NotificationBell({ companyId }: { companyId: string }) {
     </div>
   )
 }
-function getFinancialYearLabel(fyStartMonth: number) {
-  const today = new Date()
-  const month = today.getMonth() + 1
-  const startYear = month >= fyStartMonth ? today.getFullYear() : today.getFullYear() - 1
-  const endYear = startYear + 1
-
-  return `FY ${startYear}-${String(endYear).slice(-2)}`
-}
 
 export function AppTopbar() {
   const { setMobileSidebarOpen } = useUIStore()
   const company = useCompanyStore((state) => state.activeCompany())
-  const isCA = useCompanyStore((state) => state.isCA())
-  const { userType } = useUserType()
-  const showCABadge = isCA || userType === 'ca'
-  const fyLabel = getFinancialYearLabel(company?.fyStartMonth ?? 4)
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex h-14 w-full items-center justify-between border-b border-[#E2E8F0] bg-white px-4">

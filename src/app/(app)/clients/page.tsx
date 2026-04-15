@@ -8,20 +8,15 @@ import { cn } from '@/lib/utils'
 import {
   Briefcase,
   Plus,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowRight,
   Loader2,
-  Clock,
   X,
   TrendingUp,
   AlertOctagon,
   CalendarDays,
   FileText,
-  ListTodo
 } from 'lucide-react'
 import Link from 'next/link'
-import { HeaderBadge, PageHeader, SurfaceCard } from '@/components/shared/page-header'
+import { SurfaceCard } from '@/components/shared/page-header'
 import { formatAuto } from '@/lib/utils/indian-format'
 
 // ── Add Client Modal ──────────────────────────────────────────────────────
@@ -78,22 +73,6 @@ function AddClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name:
       </div>
     </div>
   )
-}
-
-type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown'
-
-const healthConfig: Record<HealthStatus, { color: string; bg: string; border: string; accent: string; label: string; icon: typeof CheckCircle2 }> = {
-  healthy: { color: 'text-[#059669]', bg: 'bg-[#ECFDF5]', border: 'border-[#A7F3D0]', accent: 'border-t-[#059669]', label: 'Healthy', icon: CheckCircle2 },
-  warning: { color: 'text-[#D97706]', bg: 'bg-[#FFFBEB]', border: 'border-[#FDE68A]', accent: 'border-t-[#D97706]', label: 'Monitor', icon: AlertTriangle },
-  critical: { color: 'text-[#DC2626]', bg: 'bg-[#FEF2F2]', border: 'border-[#FECACA]', accent: 'border-t-[#DC2626]', label: 'At Risk', icon: AlertTriangle },
-  unknown: { color: 'text-[#94A3B8]', bg: 'bg-[#F8FAFC]', border: 'border-[#E5E7EB]', accent: 'border-t-[#94A3B8]', label: 'No data', icon: Clock },
-}
-
-function getRunwayHealth(runway: number | null): HealthStatus {
-  if (runway === null) return 'unknown'
-  if (runway >= 6) return 'healthy'
-  if (runway >= 3) return 'warning'
-  return 'critical'
 }
 
 export default function ClientsPage() {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Building2, Briefcase, ArrowRight, CheckCircle2, TrendingUp, Users, BarChart3, ClipboardCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -175,12 +175,11 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
 /** Hook to get/set user type with localStorage */
 export function useUserType() {
   const [userType, setType] = useState<UserType | null>(() => getUserType())
-  const [hasChecked, setHasChecked] = useState(true)
 
   const selectType = (type: UserType) => {
     setUserType(type)
     setType(type)
   }
 
-  return { userType, hasChecked, selectType }
+  return { userType, hasChecked: true, selectType }
 }
