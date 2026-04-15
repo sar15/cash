@@ -8,42 +8,42 @@ interface Filing {
   name: string
   dueDate: string // ISO date
   status: 'upcoming' | 'due_today' | 'overdue' | 'filed'
-  clientName?: string // for CA persona
-  amount?: string // estimated amount
+  clientName?: string
+  amount?: string
 }
 
 interface ComplianceWidgetProps {
   filings: Filing[]
-  showClientName?: boolean // CA persona shows client name
+  showClientName?: boolean
 }
 
 const statusConfig = {
   upcoming: {
     icon: Clock,
-    color: 'text-sky-300',
-    bg: 'bg-sky-400/10',
-    border: 'border-sky-400/15',
+    color: 'text-[#2563EB]',
+    bg: 'bg-[#EFF6FF]',
+    border: 'border-[#BFDBFE]',
     label: 'Upcoming',
   },
   due_today: {
     icon: AlertTriangle,
-    color: 'text-amber-300',
-    bg: 'bg-amber-400/10',
-    border: 'border-amber-400/15',
+    color: 'text-[#D97706]',
+    bg: 'bg-[#FFFBEB]',
+    border: 'border-[#FDE68A]',
     label: 'Due Today',
   },
   overdue: {
     icon: AlertTriangle,
-    color: 'text-rose-300',
-    bg: 'bg-rose-400/10',
-    border: 'border-rose-400/20',
+    color: 'text-[#DC2626]',
+    bg: 'bg-[#FEF2F2]',
+    border: 'border-[#FECACA]',
     label: 'Overdue',
   },
   filed: {
     icon: CheckCircle2,
-    color: 'text-emerald-300',
-    bg: 'bg-emerald-400/10',
-    border: 'border-emerald-400/15',
+    color: 'text-[#059669]',
+    bg: 'bg-[#ECFDF5]',
+    border: 'border-[#A7F3D0]',
     label: 'Filed',
   },
 }
@@ -72,16 +72,16 @@ export function ComplianceWidget({ filings, showClientName }: ComplianceWidgetPr
   const displayFilings = sorted.slice(0, 5)
 
   return (
-    <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(15,23,42,0.72))] p-5 shadow-[0_20px_60px_rgba(2,6,23,0.2)] backdrop-blur">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-white">Upcoming Compliance</p>
-          <p className="text-xs text-slate-400">Nearest statutory filings and their status.</p>
+          <p className="text-sm font-semibold text-[#0F172A]">Upcoming Compliance</p>
+          <p className="text-xs text-[#64748B]">Nearest statutory filings and their status.</p>
         </div>
-        <Calendar className="h-4 w-4 text-slate-400" />
+        <Calendar className="h-4 w-4 text-[#94A3B8]" />
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {displayFilings.map((filing) => {
           const config = statusConfig[filing.status]
           const Icon = config.icon
@@ -91,32 +91,24 @@ export function ComplianceWidget({ filings, showClientName }: ComplianceWidgetPr
             <div
               key={filing.id}
               className={cn(
-                'hover-lift flex items-center gap-3 rounded-2xl border p-3.5 transition-colors',
+                'flex items-center gap-3 rounded-lg border p-3 transition-colors duration-[80ms]',
                 config.border,
-                filing.status === 'overdue'
-                  ? 'bg-rose-400/5'
-                  : 'bg-white/5 hover:bg-white/8'
+                config.bg
               )}
             >
-              <div className={cn('rounded-xl p-2', config.bg)}>
+              <div className={cn('rounded-lg p-1.5', config.bg)}>
                 <Icon className={cn('h-4 w-4', config.color)} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="truncate text-sm font-medium text-white">
+                <p className="truncate text-sm font-medium text-[#0F172A]">
                   {filing.name}
                 </p>
                 {showClientName && filing.clientName && (
-                  <p className="text-xs text-slate-500">{filing.clientName}</p>
+                  <p className="text-xs text-[#64748B]">{filing.clientName}</p>
                 )}
               </div>
               <div className="flex flex-col items-end">
-                <span
-                  className={cn(
-                    'rounded-full px-2.5 py-0.5 text-[10px] font-semibold',
-                    config.bg,
-                    config.color
-                  )}
-                >
+                <span className={cn('text-xs font-semibold', config.color)}>
                   {formatDate(filing.dueDate)}
                 </span>
                 {filing.status !== 'filed' && (
@@ -124,10 +116,10 @@ export function ComplianceWidget({ filings, showClientName }: ComplianceWidgetPr
                     className={cn(
                       'mt-0.5 text-[10px]',
                       days < 0
-                        ? 'text-rose-300'
+                        ? 'text-[#DC2626]'
                         : days === 0
-                          ? 'text-amber-300'
-                          : 'text-slate-500'
+                          ? 'text-[#D97706]'
+                          : 'text-[#94A3B8]'
                     )}
                   >
                     {days < 0
@@ -144,7 +136,7 @@ export function ComplianceWidget({ filings, showClientName }: ComplianceWidgetPr
       </div>
 
       {filings.length > 5 && (
-        <button className="mt-4 w-full rounded-2xl border border-white/8 bg-white/5 py-2.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/10 hover:text-white">
+        <button className="mt-3 w-full rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] py-2 text-xs font-medium text-[#475569] transition-colors duration-[80ms] hover:border-[#D1D5DB] hover:text-[#0F172A]">
           View all {filings.length} filings →
         </button>
       )}

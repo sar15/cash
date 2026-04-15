@@ -43,6 +43,15 @@ export async function upsertTimingProfile(
   const [profile] = await db
     .insert(schema.timingProfiles)
     .values({ companyId, ...data, config: typeof data.config === 'string' ? data.config : JSON.stringify(data.config) })
+    .onConflictDoUpdate({
+      target: [schema.timingProfiles.companyId, schema.timingProfiles.name],
+      set: {
+        profileType: data.profileType,
+        config: typeof data.config === 'string' ? data.config : JSON.stringify(data.config),
+        autoDerived: data.autoDerived,
+        isDefault: data.isDefault,
+      },
+    })
     .returning()
   return profile
 }

@@ -7,8 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMicroForecastStore } from '@/stores/micro-forecast-store';
-import { useCompanyStore } from '@/stores/company-store';
-import { buildForecastMonthLabels } from '@/lib/forecast-periods';
+import { forecastMonths } from '@/lib/demo-data';
 import { formatLakhs } from '@/lib/utils/indian-format';
 
 const LAKH = 10_000_000;
@@ -19,8 +18,6 @@ interface Props {
 }
 
 export function LoanWizard({ open, onClose }: Props) {
-  const fyStartMonth = useCompanyStore((state) => state.activeCompany()?.fyStartMonth ?? 4);
-  const forecastMonths = buildForecastMonthLabels({ fyStartMonth });
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [loanName, setLoanName] = useState('');

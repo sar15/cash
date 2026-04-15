@@ -1,0 +1,32 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "regions": ["bom1"],
+  "functions": {
+    "src/app/api/import/upload/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/import/parse/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/import/save/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/inngest/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/export/full/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ]
+}

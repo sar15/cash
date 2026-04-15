@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, ChevronDown, ChevronRight, Trash2, TrendingUp, User, Building, Landmark, X } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Trash2, TrendingUp, TrendingDown, User, Building, Landmark, Tag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,8 @@ const typeConfig: Record<WizardType, { icon: typeof TrendingUp; label: string; c
   hire: { icon: User, label: 'New Hire', color: 'text-blue-600', bgColor: 'bg-blue-500/10' },
   asset: { icon: Building, label: 'Asset', color: 'text-amber-600', bgColor: 'bg-amber-500/10' },
   loan: { icon: Landmark, label: 'Loan', color: 'text-indigo-600', bgColor: 'bg-indigo-500/10' },
+  expense: { icon: TrendingDown, label: 'Expense', color: 'text-red-600', bgColor: 'bg-red-500/10' },
+  price_change: { icon: Tag, label: 'Price Change', color: 'text-purple-600', bgColor: 'bg-purple-500/10' },
 };
 
 function MicroForecastRow({ item }: { item: MicroForecastItem }) {

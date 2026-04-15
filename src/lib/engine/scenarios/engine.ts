@@ -21,6 +21,7 @@ interface ScenarioEngineOptions {
   valueRules?: ForecastEngineOptions['valueRules']
   timingProfiles?: ForecastEngineOptions['timingProfiles']
   complianceConfig?: ForecastEngineOptions['complianceConfig']
+  openingBalances?: ForecastEngineOptions['openingBalances']
 }
 
 function cloneTimingProfiles(
@@ -78,6 +79,7 @@ export function runScenarioForecastEngine({
   valueRules = {},
   timingProfiles = {},
   complianceConfig,
+  openingBalances,
 }: ScenarioEngineOptions) {
   const options: ForecastEngineOptions = {
     accounts,
@@ -87,6 +89,7 @@ export function runScenarioForecastEngine({
     timingProfiles: applyTimingOverrides(timingProfiles, scenario),
     microForecastItems: applyMicroForecastToggles(microForecastItems, scenario),
     complianceConfig,
+    openingBalances,
   }
 
   return runForecastEngine(options)

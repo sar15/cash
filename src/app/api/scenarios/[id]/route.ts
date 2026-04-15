@@ -2,6 +2,8 @@ import { type NextRequest } from 'next/server'
 import { resolveAuthedCompany, isErrorResponse, jsonOk, jsonError, jsonValidationError } from '@/lib/api/helpers'
 import { updateScenarioSchema, saveScenarioOverridesSchema } from '@/lib/db/validation'
 import * as scenarioQueries from '@/lib/db/queries/scenarios'
+import { writeAuditLog } from '@/lib/db/queries/audit-log'
+import { auth } from '@clerk/nextjs/server'
 
 // GET /api/scenarios/[id] — Get scenario with overrides
 export async function GET(
@@ -88,6 +90,20 @@ export async function PUT(
         config: JSON.stringify(o.config),
       }))
     )
+
+    // Audit log (non-blocking)
+    const { userId } = await auth()
+    if (userId) {
+      writeAuditLog({
+        companyId: ctx.companyId,
+        clerkUserId: userId,
+        action: 'scenario.overrides.saved',
+        entityType: 'scenario',
+        entityId: id,
+        newValue: { overridesCount: parsed.data.overrides.length },
+      }).catch(() => {})
+    }
+
     return jsonOk({ overrides })
   } catch {
     return jsonError('Failed to save overrides', 500)

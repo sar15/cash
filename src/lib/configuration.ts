@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 import type { AnyTimingProfileConfig } from '@/lib/engine/timing-profiles/types';
 import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types';
-import type { WorkspaceConfigurationFile } from '@/stores/workspace-store';
+import type { WorkspaceConfigurationFile } from '@/types/workspace';
+
+export type { WorkspaceConfigurationFile };
 
 const microForecastSnapshotSchema = z.object({
   type: z.enum(['revenue', 'hire', 'asset', 'loan']),

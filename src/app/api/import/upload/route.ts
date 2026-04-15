@@ -7,9 +7,25 @@ import { requireCompanyForUser, requireUserId } from '@/lib/server/auth'
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 const ALLOWED_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv'])
 
+// MIME type allowlist — validated server-side, not just extension
+const ALLOWED_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
+  'text/csv',
+  'text/plain', // some browsers send CSV as text/plain
+  'application/csv',
+  'application/octet-stream', // fallback for some upload clients
+])
+
 function getExtension(filename: string) {
   const index = filename.lastIndexOf('.')
   return index >= 0 ? filename.slice(index).toLowerCase() : ''
+}
+
+function isAllowedMimeType(mimeType: string): boolean {
+  if (!mimeType) return true // no MIME = allow (extension check is the gate)
+  const base = mimeType.split(';')[0].trim().toLowerCase()
+  return ALLOWED_MIME_TYPES.has(base)
 }
 
 export async function POST(request: NextRequest) {
@@ -25,6 +41,10 @@ export async function POST(request: NextRequest) {
 
     if (!ALLOWED_EXTENSIONS.has(getExtension(file.name))) {
       throw new RouteError(422, 'Only .xlsx, .xls, and .csv files are supported.')
+    }
+
+    if (!isAllowedMimeType(file.type)) {
+      throw new RouteError(422, 'Invalid file type. Only Excel and CSV files are supported.')
     }
 
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {

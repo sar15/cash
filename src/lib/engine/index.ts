@@ -36,7 +36,7 @@ export interface AccountInput {
 
 export interface ForecastMicroForecastItem {
   id: string
-  type?: 'revenue' | 'hire' | 'asset' | 'loan'
+  type?: 'revenue' | 'hire' | 'asset' | 'loan' | 'expense' | 'price_change'
   isActive?: boolean
   microForecast: MicroForecast
 }

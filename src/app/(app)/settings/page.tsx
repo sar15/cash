@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { useCompanyContext } from '@/hooks/use-company-context'
 import { useCompanyStore } from '@/stores/company-store'
 import { useForecastConfigStore } from '@/stores/forecast-config-store'
+import { useUIStore } from '@/stores/ui-store'
+import { useUserType, type UserType } from '@/components/shared/UserTypeModal'
 import { cn } from '@/lib/utils'
 import {
   Settings,
@@ -15,6 +17,12 @@ import {
   Database,
   FileDown,
   FileUp,
+  User,
+  Users,
+  Trash2,
+  Link2,
+  RefreshCw,
+  Download,
 } from 'lucide-react'
 import { HeaderBadge, PageHeader, SurfaceCard } from '@/components/shared/page-header'
 
@@ -35,13 +43,13 @@ function SettingsSection({
 }) {
   return (
     <SurfaceCard className="space-y-5">
-      <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-emerald-400/10 p-2.5">
-          <Icon className="h-5 w-5 text-emerald-300" />
+      <div className="flex items-center gap-3 border-b border-[#E5E7EB] pb-4">
+        <div className="rounded-lg bg-[#F1F5F9] p-2.5">
+          <Icon className="h-4 w-4 text-[#475569]" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-white">{title}</h2>
-          <p className="text-xs text-slate-400">{description}</p>
+          <h2 className="text-sm font-semibold text-[#0F172A]">{title}</h2>
+          <p className="text-xs text-[#64748B]">{description}</p>
         </div>
       </div>
       {children}
@@ -58,7 +66,7 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#64748B]">
         {label}
       </label>
       <div className="mt-2">{children}</div>
@@ -69,12 +77,93 @@ function FormField({
 // ============================================================
 // MAIN SETTINGS PAGE
 // ============================================================
+// ZOHO BOOKS INTEGRATION CARD
+// ============================================================
+
+function ZohoIntegrationCard({ companyId }: { companyId: string }) {
+  const [status, setStatus] = useState<{ connected: boolean; syncStatus: string | null; lastSyncedAt: string | null } | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  useEffect(() => {
+    if (!companyId) return
+    fetch(`/api/integrations/zoho/sync?companyId=${companyId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: typeof status) => { if (data) setStatus(data) })
+      .catch(() => {})
+  }, [companyId])
+
+  const handleSync = async () => {
+    if (!companyId) return
+    setIsSyncing(true)
+    try {
+      await fetch(`/api/integrations/zoho/sync?companyId=${companyId}`, { method: 'POST' })
+      setStatus(prev => prev ? { ...prev, syncStatus: 'idle', lastSyncedAt: new Date().toISOString() } : prev)
+    } catch { /* ignore */ } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-[#E5E7EB] p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EFF6FF]">
+            <span className="text-lg font-bold text-[#2563EB]">Z</span>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[#0F172A]">Zoho Books</p>
+            <p className="text-xs text-[#64748B]">
+              {status?.connected
+                ? status.lastSyncedAt
+                  ? `Last synced ${new Date(status.lastSyncedAt).toLocaleDateString('en-IN')}`
+                  : 'Connected — never synced'
+                : 'Not connected · 80% of Indian SMEs use Zoho Books'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {status?.connected ? (
+            <>
+              <button
+                onClick={handleSync}
+                disabled={isSyncing || status.syncStatus === 'syncing'}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] transition-colors hover:border-[#CBD5E1] disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', (isSyncing || status.syncStatus === 'syncing') && 'animate-spin')} />
+                {isSyncing || status.syncStatus === 'syncing' ? 'Syncing...' : 'Sync now'}
+              </button>
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-medium text-[#059669]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#059669]" />
+                Connected
+              </span>
+            </>
+          ) : (
+            <a
+              href={companyId ? `/api/integrations/zoho/connect?companyId=${companyId}` : '#'}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172A] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#1E293B]"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              Connect
+            </a>
+          )}
+        </div>
+      </div>
+      {status?.syncStatus === 'error' && (
+        <p className="mt-2 text-xs text-[#DC2626]">Sync error — check your Zoho Books connection</p>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
 
 export default function SettingsPage() {
   const { company, companyId, isLoading } = useCompanyContext()
   const updateCompany = useCompanyStore((s) => s.updateCompany)
   const complianceConfig = useForecastConfigStore((s) => s.complianceConfig)
   const updateCompliance = useForecastConfigStore((s) => s.updateCompliance)
+  const showToast = useUIStore((s) => s.showToast)
+  const { userType, selectType } = useUserType()
 
   // Local state for form
   const [companyForm, setCompanyForm] = useState({
@@ -100,6 +189,13 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
+  // Team members state
+  const [members, setMembers] = useState<Array<{ id: string; clerkUserId: string; role: string; invitedEmail?: string | null; acceptedAt?: string | null }>>([])
+  const [inviteUserId, setInviteUserId] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer')
+  const [isInviting, setIsInviting] = useState(false)
+
   // Populate forms when company loads
   useEffect(() => {
     if (!company) return
@@ -114,6 +210,15 @@ export default function SettingsPage() {
     })
   }, [company])
 
+  // Load team members
+  useEffect(() => {
+    if (!companyId) return
+    fetch(`/api/companies/${companyId}/members`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { members?: typeof members } | null) => { if (data?.members) setMembers(data.members) })
+      .catch(() => {})
+  }, [companyId])
+
   useEffect(() => {
     if (!complianceConfig) return
     setComplianceForm({
@@ -126,6 +231,34 @@ export default function SettingsPage() {
       esiRate: 3.25,
     })
   }, [complianceConfig])
+
+  const handleInviteMember = useCallback(async () => {
+    if (!companyId || !inviteUserId.trim()) return
+    setIsInviting(true)
+    try {
+      const res = await fetch(`/api/companies/${companyId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clerkUserId: inviteUserId.trim(), role: inviteRole, invitedEmail: inviteEmail.trim() || undefined }),
+      })
+      if (res.ok) {
+        const data = await res.json() as { member: typeof members[0] }
+        setMembers(prev => [...prev.filter(m => m.clerkUserId !== data.member.clerkUserId), data.member])
+        setInviteUserId('')
+        setInviteEmail('')
+        showToast('Member invited', 'success')
+      }
+    } catch { /* ignore */ } finally {
+      setIsInviting(false)
+    }
+  }, [companyId, inviteUserId, inviteEmail, inviteRole, showToast])
+
+  const handleRemoveMember = useCallback(async (clerkUserId: string) => {
+    if (!companyId) return
+    await fetch(`/api/companies/${companyId}/members?clerkUserId=${encodeURIComponent(clerkUserId)}`, { method: 'DELETE' })
+    setMembers(prev => prev.filter(m => m.clerkUserId !== clerkUserId))
+    showToast('Member removed', 'success')
+  }, [companyId, showToast])
 
   const handleSave = useCallback(async () => {
     if (!companyId) return
@@ -143,29 +276,32 @@ export default function SettingsPage() {
         numberFormat: companyForm.numberFormat,
       })
 
-      // Save compliance config
+      // Save full compliance config including TDS/PF/ESI
       await updateCompliance(companyId, {
         gstRate: complianceForm.gstRate,
         itcPct: complianceForm.itcPct,
         taxRate: complianceForm.taxRate,
         supplyType: complianceForm.supplyType,
+        pfApplicable: complianceForm.pfRate > 0,
+        esiApplicable: complianceForm.esiRate > 0,
       })
 
       setSaveSuccess(true)
+      showToast('Settings saved successfully', 'success')
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
       console.error('[Settings] Save error:', err)
     } finally {
       setIsSaving(false)
     }
-  }, [companyId, companyForm, complianceForm, updateCompany, updateCompliance])
+  }, [companyId, companyForm, complianceForm, updateCompany, updateCompliance, showToast])
 
   if (isLoading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-          <p className="text-sm text-slate-400">Loading workspace settings...</p>
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#E5E7EB] border-t-[#38BDF8]" />
+          <p className="text-sm text-[#64748B]">Loading workspace settings...</p>
         </div>
       </div>
     )
@@ -188,8 +324,10 @@ export default function SettingsPage() {
             onClick={handleSave}
             disabled={isSaving}
             className={cn(
-              'inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-slate-950 transition-all',
-              saveSuccess ? 'bg-emerald-400' : 'bg-emerald-500 hover:bg-emerald-400',
+              'inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-all',
+              saveSuccess
+                ? 'border-[#BAE6FD] bg-[#F0F9FF] text-[#0284C7]'
+                : 'border-[#0F172A] bg-[#0F172A] text-white hover:bg-[#1E293B]',
               isSaving && 'opacity-60'
             )}
           >
@@ -347,27 +485,184 @@ export default function SettingsPage() {
         icon={Database}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="hover-lift rounded-[20px] border border-white/8 bg-white/5 p-5 text-center transition-colors hover:bg-white/8">
-            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-sky-400/10">
-              <FileDown className="h-5 w-5 text-sky-300" />
+          <div className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-5 text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF6FF]">
+              <FileDown className="h-5 w-5 text-[#2563EB]" />
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-white">Export Configuration</h3>
-            <p className="mt-1.5 text-xs text-slate-400">Download your settings, value rules, and events as a backup JSON file.</p>
-            <button className="mt-4 w-full rounded-full border border-white/10 bg-white/5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-white/10">
+            <h3 className="mt-3 text-sm font-semibold text-[#0F172A]">Export Configuration</h3>
+            <p className="mt-1.5 text-xs text-[#64748B]">Download your settings, value rules, and events as a backup JSON file.</p>
+            <button
+              onClick={() => {
+                const data = {
+                  company: companyForm,
+                  compliance: complianceForm,
+                  exportedAt: new Date().toISOString(),
+                }
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `cashflowiq-config-${companyForm.name.replace(/\s+/g, '_')}.json`
+                a.click()
+                URL.revokeObjectURL(url)
+                showToast('Configuration exported', 'success')
+              }}
+              className="btn-press mt-4 w-full rounded border border-[#E5E7EB] bg-white py-2 text-xs font-semibold text-[#0F172A] transition-colors duration-[80ms] hover:border-[#D1D5DB]">
               Export to JSON
             </button>
           </div>
 
-          <div className="hover-lift rounded-[20px] border border-white/8 bg-white/5 p-5 text-center transition-colors hover:bg-white/8">
-            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/10">
-              <FileUp className="h-5 w-5 text-amber-300" />
+          <div className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-5 text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFFBEB]">
+              <FileUp className="h-5 w-5 text-[#D97706]" />
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-white">Import Configuration</h3>
-            <p className="mt-1.5 text-xs text-slate-400">Upload a previously exported JSON backup to restore your settings and models.</p>
-            <button className="mt-4 w-full rounded-full border border-white/10 bg-white/5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-white/10">
+            <h3 className="mt-3 text-sm font-semibold text-[#0F172A]">Import Configuration</h3>
+            <p className="mt-1.5 text-xs text-[#64748B]">Upload a previously exported JSON backup to restore your settings.</p>
+            <label className="btn-press mt-4 block w-full cursor-pointer rounded border border-[#E5E7EB] bg-white py-2 text-xs font-semibold text-[#0F172A] transition-colors duration-[80ms] hover:border-[#D1D5DB]">
               Upload JSON File
+              <input type="file" accept=".json" className="hidden" onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = (ev) => {
+                  try {
+                    const data = JSON.parse(ev.target?.result as string)
+                    if (data.company) setCompanyForm(prev => ({ ...prev, ...data.company }))
+                    if (data.compliance) setComplianceForm(prev => ({ ...prev, ...data.compliance }))
+                    showToast('Configuration imported — click Save to apply', 'info')
+                  } catch {
+                    showToast('Invalid JSON file', 'error')
+                  }
+                }
+                reader.readAsText(file)
+              }} />
+            </label>
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Integrations — Zoho Books */}
+      <SettingsSection
+        title="Integrations"
+        description="Connect your accounting software for automatic daily sync of actuals"
+        icon={Link2}
+      >
+        <ZohoIntegrationCard companyId={companyId ?? ''} />
+
+        {/* Full data export */}
+        <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">Export All Data</p>
+              <p className="text-xs text-[#64748B]">Download a complete JSON backup of all accounts, actuals, rules, and scenarios.</p>
+            </div>
+            <a
+              href={companyId ? `/api/export/full?companyId=${companyId}` : '#'}
+              download
+              className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold text-[#0F172A] transition-colors hover:border-[#CBD5E1]"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export JSON
+            </a>
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Team Members */}
+      <SettingsSection
+        title="Team Members"
+        description="Invite team members to collaborate on this company's forecasts"
+        icon={Users}
+      >
+        {/* Current members */}
+        {members.length > 0 && (
+          <div className="mb-4 divide-y divide-[#E5E7EB] rounded-lg border border-[#E5E7EB]">
+            {members.map(m => (
+              <div key={m.id} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-[#0F172A]">{m.invitedEmail ?? m.clerkUserId}</p>
+                  <p className="text-xs text-[#64748B]">
+                    {m.role} · {m.acceptedAt ? 'Active' : 'Pending invite'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRemoveMember(m.clerkUserId)}
+                  className="rounded p-1.5 text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626]"
+                  title="Remove member"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Invite form */}
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField label="Clerk User ID">
+              <input
+                type="text"
+                value={inviteUserId}
+                onChange={e => setInviteUserId(e.target.value)}
+                placeholder="user_XXXXXX"
+                className="surface-input"
+              />
+            </FormField>
+            <FormField label="Email (optional)">
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                placeholder="colleague@company.com"
+                className="surface-input"
+              />
+            </FormField>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={inviteRole}
+              onChange={e => setInviteRole(e.target.value as 'editor' | 'viewer')}
+              className="surface-select w-32"
+            >
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+            </select>
+            <button
+              onClick={handleInviteMember}
+              disabled={!inviteUserId.trim() || isInviting}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#0F172A] bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#1E293B] disabled:opacity-60"
+            >
+              {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+              Invite
             </button>
           </div>
+        </div>
+      </SettingsSection>
+
+      {/* User Type */}
+      <SettingsSection
+        title="Account Type"
+        description="How you use CashFlowIQ — affects which features are shown"
+        icon={User}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {([
+            { id: 'sme' as UserType, label: 'Business Owner', desc: 'SME, startup, or manufacturer managing one company' },
+            { id: 'ca' as UserType, label: 'CA / CFO', desc: 'Managing multiple clients with portfolio-level visibility' },
+          ]).map((opt) => (
+            <button key={opt.id} onClick={() => selectType(opt.id)}
+              className={cn(
+                'btn-press rounded-lg border p-4 text-left transition-colors duration-[80ms]',
+                userType === opt.id
+                  ? 'border-[#38BDF8] bg-[#F0F9FF]'
+                  : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
+              )}>
+              <p className={cn('text-sm font-semibold', userType === opt.id ? 'text-[#0284C7]' : 'text-[#0F172A]')}>
+                {opt.label}
+              </p>
+              <p className="mt-0.5 text-xs text-[#64748B]">{opt.desc}</p>
+            </button>
+          ))}
         </div>
       </SettingsSection>
     </div>

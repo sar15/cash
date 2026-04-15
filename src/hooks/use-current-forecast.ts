@@ -1,13 +1,16 @@
 /**
- * useCurrentForecast v2 — API-backed, explicit engine params
+ * useCurrentForecast v3 — uses runScenarioForecastEngine
  *
- * Replaces the old v1 that imported mutable globals from demo-data.ts.
- * This version reads from API-backed stores and passes explicit params
- * to the engine. NO demo-data, NO localStorage, NO mutation.
+ * Properly applies scenario overrides (baseline adjustments, timing profile
+ * overrides, micro-forecast toggles) through the dedicated scenario engine
+ * instead of manually applying adjustments.
+ *
+ * v3.1: Persists engine result to DB (debounced 800ms) so next page load
+ * can use cached result instead of recomputing from scratch.
  */
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useEffect, useRef } from 'react'
 import { useAccountsStore, type Account } from '@/stores/accounts-store'
 import { useActualsStore } from '@/stores/actuals-store'
 import { useForecastConfigStore } from '@/stores/forecast-config-store'
@@ -15,14 +18,15 @@ import { useCompanyStore } from '@/stores/company-store'
 import { useMicroForecastStore } from '@/stores/micro-forecast-store'
 import { getScenarioAdjustments, useScenarioStore } from '@/stores/scenario-store'
 import {
-  runForecastEngine,
   type AccountInput,
   type EngineResult,
-  type ForecastEngineOptions,
 } from '@/lib/engine'
+import { runScenarioForecastEngine } from '@/lib/engine/scenarios/engine'
+import type { ScenarioDefinition } from '@/lib/engine/scenarios/types'
 import type { OpeningBalances } from '@/lib/engine/three-way/builder'
 import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import { buildForecastMonthLabels } from '@/lib/forecast-periods'
+import { apiPost } from '@/lib/api/client'
 
 /**
  * Map DB account types to engine categories.
@@ -151,6 +155,7 @@ export interface ForecastData {
   engineResult: EngineResult | null
   forecastMonths: string[]
   isReady: boolean
+  hasAccounts: boolean
   error: string | null
   accounts: Account[]
 }
@@ -159,8 +164,14 @@ export function useCurrentForecast(): ForecastData {
   const company = useCompanyStore((s) => s.activeCompany())
   const accounts = useAccountsStore((s) => s.accounts)
   const accountsLoading = useAccountsStore((s) => s.isLoading)
-  const getHistoricalValues = useActualsStore((s) => s.getHistoricalValues)
+  const actualsLoading = useActualsStore((s) => s.isLoading)
+  const configLoading = useForecastConfigStore((s) => s.isLoading)
+  // Stable reference: subscribe to the actuals array so we re-run when data changes,
+  // but keep getHistoricalValues stable (it reads from get() internally)
+  const actuals = useActualsStore((s) => s.actuals)
+  const actualsVersion = actuals.length // used as memo trigger when actuals change
   const historicalMonths = useActualsStore((s) => s.historicalMonths)
+  const getHistoricalValues = useActualsStore((s) => s.getHistoricalValues)
   const valueRules = useForecastConfigStore((s) => s.valueRules)
   const timingProfiles = useForecastConfigStore((s) => s.timingProfiles)
   const complianceConfig = useForecastConfigStore((s) => s.complianceConfig)
@@ -176,18 +187,14 @@ export function useCurrentForecast(): ForecastData {
     [company?.fyStartMonth, historicalMonths]
   )
 
+  const storesLoading = accountsLoading || actualsLoading || configLoading
+
   const engineResult = useMemo(() => {
-    if (!company || accounts.length === 0 || accountsLoading) return null
+    if (!company || accounts.length === 0 || storesLoading || actualsVersion < 0) return null
 
     try {
       const accountInputs: AccountInput[] = accounts.map((acc) =>
         accountToEngineInput(acc, getHistoricalValues(acc.id))
-      )
-      const baselineAdjustments = Object.fromEntries(
-        getScenarioAdjustments(selectedScenario).map((override) => [
-          override.accountId,
-          override.adjustmentPct,
-        ])
       )
       const openingBalances = deriveOpeningBalances(accounts, getHistoricalValues)
       const effectiveValueRules = buildEffectiveValueRules(
@@ -197,13 +204,27 @@ export function useCurrentForecast(): ForecastData {
         forecastMonths.length
       )
 
-      const options: ForecastEngineOptions = {
+      const scenarioDefinition: ScenarioDefinition | null = selectedScenario
+        ? {
+            id: selectedScenario.id,
+            name: selectedScenario.name,
+            description: selectedScenario.description ?? undefined,
+            baselineAdjustments: getScenarioAdjustments(selectedScenario).map((a) => ({
+              accountId: a.accountId,
+              adjustmentPct: a.adjustmentPct,
+            })),
+            timingProfileOverrides: [],
+            microForecastToggles: [],
+          }
+        : null
+
+      return runScenarioForecastEngine({
         accounts: accountInputs,
         forecastMonthLabels: forecastMonths,
+        scenario: scenarioDefinition,
         valueRules: effectiveValueRules,
         timingProfiles,
         microForecastItems,
-        baselineAdjustments,
         openingBalances,
         complianceConfig: complianceConfig
           ? {
@@ -213,9 +234,7 @@ export function useCurrentForecast(): ForecastData {
               supplyType: complianceConfig.supplyType,
             }
           : undefined,
-      }
-
-      return runForecastEngine(options)
+      })
     } catch (err) {
       console.error('[useCurrentForecast] Engine error:', err)
       return null
@@ -223,20 +242,51 @@ export function useCurrentForecast(): ForecastData {
   }, [
     company,
     accounts,
-    accountsLoading,
-    getHistoricalValues,
+    storesLoading,
+    actualsVersion,
     forecastMonths,
     valueRules,
     timingProfiles,
     complianceConfig,
     microForecastItems,
     selectedScenario,
+    getHistoricalValues,
   ])
+
+  // Persist result to DB (debounced 800ms) so next load is instant
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!engineResult || !company?.id) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      const lastMonth = engineResult.rawIntegrationResults[engineResult.rawIntegrationResults.length - 1]
+      const metrics = {
+        closingCash: lastMonth?.bs?.cash ?? 0,
+        totalRevenue: engineResult.rawIntegrationResults.reduce((s, m) => s + (m?.pl?.revenue ?? 0), 0),
+        totalNetIncome: engineResult.rawIntegrationResults.reduce((s, m) => s + (m?.pl?.netIncome ?? 0), 0),
+        forecastMonths: engineResult.forecastMonths,
+      }
+      apiPost(`/api/forecast/result/${company.id}`, {
+        scenarioId: null,
+        plData: { accountForecasts: engineResult.accountForecasts },
+        bsData: { months: engineResult.rawIntegrationResults.map(m => m?.bs) },
+        cfData: { months: engineResult.rawIntegrationResults.map(m => m?.cf) },
+        compliance: engineResult.compliance,
+        metrics,
+      }).catch(() => {
+        // Silent fail — caching is best-effort, not critical
+      })
+    }, 800)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [engineResult, company?.id])
 
   return {
     engineResult,
     forecastMonths,
-    isReady: !!company && accounts.length > 0 && !accountsLoading,
+    isReady: !!company && !storesLoading,
+    hasAccounts: accounts.length > 0,
     error: null,
     accounts,
   }

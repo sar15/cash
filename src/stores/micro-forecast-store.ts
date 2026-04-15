@@ -8,10 +8,12 @@ import { generateAssetMicroForecast, type AssetWizardInputs } from '@/lib/engine
 import { generateLoanMicroForecast, type LoanWizardInputs } from '@/lib/engine/micro-forecasts/wizards/loan';
 import { generateNewHireMicroForecast, type NewHireWizardInputs } from '@/lib/engine/micro-forecasts/wizards/new-hire';
 import { generateRevenueMicroForecast, type RevenueWizardInputs } from '@/lib/engine/micro-forecasts/wizards/revenue';
+import { generateOneTimeExpenseMicroForecast, type OneTimeExpenseWizardInputs } from '@/lib/engine/micro-forecasts/wizards/one-time-expense';
+import { generatePriceChangeMicroForecast, type PriceChangeWizardInputs } from '@/lib/engine/micro-forecasts/wizards/price-change';
 import { buildForecastMonthLabels } from '@/lib/forecast-periods';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api/client';
 
-export type WizardType = 'revenue' | 'hire' | 'asset' | 'loan';
+export type WizardType = 'revenue' | 'hire' | 'asset' | 'loan' | 'expense' | 'price_change';
 
 /** Build FY-aware forecast month labels (same as use-current-forecast.ts) */
 function getForecastMonths(): string[] {
@@ -23,7 +25,9 @@ type WizardInputs =
   | RevenueWizardInputs
   | NewHireWizardInputs
   | AssetWizardInputs
-  | LoanWizardInputs;
+  | LoanWizardInputs
+  | OneTimeExpenseWizardInputs
+  | PriceChangeWizardInputs;
 
 interface ApiMicroForecastLine {
   accountId?: string | null;
@@ -78,6 +82,8 @@ interface MicroForecastState {
   addHire: (inputs: NewHireWizardInputs) => Promise<void>;
   addAsset: (inputs: AssetWizardInputs) => Promise<void>;
   addLoan: (inputs: LoanWizardInputs) => Promise<void>;
+  addExpense: (inputs: OneTimeExpenseWizardInputs) => Promise<void>;
+  addPriceChange: (inputs: PriceChangeWizardInputs) => Promise<void>;
 
   toggleActive: (id: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
@@ -99,6 +105,8 @@ function normalizeWizardType(category: string): WizardType {
     case 'asset':
     case 'loan':
     case 'revenue':
+    case 'expense':
+    case 'price_change':
       return category;
     default:
       return 'revenue';
@@ -117,6 +125,10 @@ function buildMicroForecast(type: WizardType, id: string, wizardInputs: WizardIn
       return generateAssetMicroForecast(id, wizardInputs as AssetWizardInputs, getForecastMonths());
     case 'loan':
       return generateLoanMicroForecast(id, wizardInputs as LoanWizardInputs, getForecastMonths());
+    case 'expense':
+      return generateOneTimeExpenseMicroForecast(id, wizardInputs as OneTimeExpenseWizardInputs, getForecastMonths());
+    case 'price_change':
+      return generatePriceChangeMicroForecast(id, wizardInputs as PriceChangeWizardInputs, getForecastMonths());
     case 'revenue':
     default:
       return generateRevenueMicroForecast(id, wizardInputs as RevenueWizardInputs, getForecastMonths());
@@ -184,17 +196,21 @@ function createDraftItem<T extends WizardInputs>(type: WizardType, inputs: T): M
   const id = crypto.randomUUID();
   const microForecast = buildMicroForecast(type, id, inputs);
 
+  const startMonth =
+    'startMonth' in inputs && typeof inputs.startMonth === 'string'
+      ? inputs.startMonth
+      : 'purchaseMonth' in inputs && typeof (inputs as AssetWizardInputs).purchaseMonth === 'string'
+        ? (inputs as AssetWizardInputs).purchaseMonth
+        : 'month' in inputs && typeof (inputs as OneTimeExpenseWizardInputs).month === 'string'
+          ? (inputs as OneTimeExpenseWizardInputs).month
+          : getForecastMonths()[0]
+
   return {
     id,
     name: microForecast.name,
     type,
     isActive: true,
-    startMonth:
-      'startMonth' in inputs
-        ? inputs.startMonth
-        : 'purchaseMonth' in inputs
-          ? inputs.purchaseMonth
-          : getForecastMonths()[0],
+    startMonth,
     microForecast,
     wizardInputs: inputs,
   };
@@ -271,6 +287,24 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
   addLoan: async (inputs) => {
     set({ error: null });
     const saved = await persistItem(createDraftItem('loan', inputs), get().items.length);
+    set((state) => ({
+      items: [...state.items, buildItemFromRecord(saved)],
+      hasLoaded: true,
+    }));
+  },
+
+  addExpense: async (inputs) => {
+    set({ error: null });
+    const saved = await persistItem(createDraftItem('expense', inputs), get().items.length);
+    set((state) => ({
+      items: [...state.items, buildItemFromRecord(saved)],
+      hasLoaded: true,
+    }));
+  },
+
+  addPriceChange: async (inputs) => {
+    set({ error: null });
+    const saved = await persistItem(createDraftItem('price_change', inputs), get().items.length);
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,

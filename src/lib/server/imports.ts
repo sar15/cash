@@ -133,8 +133,8 @@ function buildWarnings(rows: PreviewRow[], structure: ColumnMap) {
   return warnings
 }
 
-export function buildImportPreview(buffer: ArrayBuffer, requestedSheetName?: string) {
-  const sheets = parseExcelBuffer(buffer)
+export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName?: string) {
+  const sheets = await parseExcelBuffer(buffer)
   if (sheets.length === 0) {
     throw new RouteError(422, 'No readable sheets were found in the uploaded file.')
   }

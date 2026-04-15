@@ -37,27 +37,27 @@ export function CashRunwayChart({
   const belowThreshold = minCash < thresholdRupees
 
   return (
-    <div className="stagger-enter rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(15,23,42,0.72))] p-5 shadow-[0_20px_60px_rgba(2,6,23,0.2)] backdrop-blur">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="rounded-md border border-[#E5E7EB] bg-white p-5">
+      <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-white">Cash Runway Projection</p>
-          <p className="text-xs text-slate-400">Monthly cash balance trajectory with danger threshold.</p>
+          <p className="text-sm font-semibold text-[#0F172A]">Cash Runway Projection</p>
+          <p className="text-xs text-[#94A3B8]">Monthly cash balance trajectory · danger threshold at {formatCompact(dangerThreshold)}</p>
         </div>
         {belowThreshold && (
-          <span className="inline-flex items-center rounded-full border border-rose-400/25 bg-rose-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-200">
+          <span className="inline-flex items-center rounded border border-[#FECACA] bg-[#FEF2F2] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#DC2626]">
             ⚠ Below Threshold
           </span>
         )}
       </div>
-      <ResponsiveContainer width="100%" height={240}>
+      <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={data}>
           <defs>
-            <linearGradient id="cashGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#34d399" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#34d399" stopOpacity={0.02} />
+            <linearGradient id="cashGradientLight" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#059669" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#059669" stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
           <XAxis
             dataKey="month"
             axisLine={false}
@@ -78,12 +78,11 @@ export function CashRunwayChart({
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(148,163,184,0.15)',
-              borderRadius: '16px',
-              color: '#e2e8f0',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              color: '#0F172A',
               fontSize: '12px',
-              boxShadow: '0 8px 32px rgba(2,6,23,0.4)',
             }}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => {
@@ -93,24 +92,24 @@ export function CashRunwayChart({
           />
           <ReferenceLine
             y={thresholdRupees}
-            stroke="#fb7185"
+            stroke="#DC2626"
             strokeDasharray="6 3"
-            strokeWidth={1.5}
+            strokeWidth={1}
             label={{
               value: `Min: ${formatCompact(dangerThreshold)}`,
               position: 'right',
-              fill: '#fb7185',
+              fill: '#DC2626',
               fontSize: 10,
             }}
           />
           <Area
             type="monotone"
             dataKey="cash"
-            stroke="#34d399"
-            strokeWidth={2.5}
-            fill="url(#cashGradient)"
+            stroke="#059669"
+            strokeWidth={2}
+            fill="url(#cashGradientLight)"
             dot={false}
-            activeDot={{ r: 4, fill: '#34d399', stroke: '#0F172A', strokeWidth: 2 }}
+            activeDot={{ r: 4, fill: '#059669', stroke: '#FFFFFF', strokeWidth: 2 }}
           />
         </AreaChart>
       </ResponsiveContainer>

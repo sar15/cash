@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils'
 
-export type ViewType = 'pl' | 'bs' | 'cf'
+export type ViewType = 'pl' | 'bs' | 'cf' | 'drivers' | 'variance'
 
 interface ViewSwitcherProps {
   activeView: ViewType
@@ -10,23 +10,25 @@ interface ViewSwitcherProps {
 }
 
 const views: { id: ViewType; label: string; shortLabel: string }[] = [
-  { id: 'pl', label: 'Profit & Loss', shortLabel: 'P&L' },
-  { id: 'bs', label: 'Balance Sheet', shortLabel: 'BS' },
-  { id: 'cf', label: 'Cash Flow', shortLabel: 'CF' },
+  { id: 'pl',       label: 'Profit & Loss',  shortLabel: 'P&L' },
+  { id: 'bs',       label: 'Balance Sheet',  shortLabel: 'BS' },
+  { id: 'cf',       label: 'Cash Flow',      shortLabel: 'CF' },
+  { id: 'drivers',  label: 'Drivers',        shortLabel: 'Dr' },
+  { id: 'variance', label: 'Variance',       shortLabel: 'Var' },
 ]
 
 export function ViewSwitcher({ activeView, onViewChange }: ViewSwitcherProps) {
   return (
-    <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 p-1">
+    <div className="flex items-center gap-0 border-b border-transparent">
       {views.map((view) => (
         <button
           key={view.id}
           onClick={() => onViewChange(view.id)}
           className={cn(
-            'relative rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
+            'relative px-4 py-2 text-sm font-medium transition-colors duration-150',
             activeView === view.id
-              ? 'bg-emerald-500 text-slate-950 shadow-[0_2px_8px_rgba(16,185,129,0.3)]'
-              : 'text-slate-400 hover:bg-white/8 hover:text-white'
+              ? 'text-[#0F172A] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#059669]'
+              : 'text-[#64748B] hover:text-[#0F172A]'
           )}
         >
           <span className="hidden sm:inline">{view.label}</span>

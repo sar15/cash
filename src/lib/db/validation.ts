@@ -82,7 +82,7 @@ export const upsertTimingProfileSchema = z.object({
 // MICRO-FORECAST SCHEMAS
 // ============================================================
 export const microForecastCategoryEnum = z.enum([
-  'hire', 'asset', 'loan', 'revenue', 'marketing', 'equity', 'custom',
+  'hire', 'asset', 'loan', 'revenue', 'expense', 'price_change', 'marketing', 'equity', 'custom',
 ])
 
 export const microForecastLineSchema = z.object({

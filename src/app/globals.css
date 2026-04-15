@@ -50,21 +50,24 @@
 
 /*
  * ══════════════════════════════════════════════════════════
- * CashFlowIQ — Surgical Precision Theme
+ * CashFlowIQ — Fathom-Level Precision Theme v2
  *
- * Design rules:
+ * Design principles (from Linear, Stripe, Fathom research):
  *   Color is DATA, not decoration.
  *   Green #059669 = good. Red #DC2626 = stop.
  *   Amber #D97706 = attention. Blue #2563EB = interactive.
  *   Everything else is monochrome slate.
- *   4px grid. No gradients. No shadows. No purple.
+ *   4px grid. Subtle shadows. No purple.
  *   Inter for UI. IBM Plex Mono for numbers.
  *   80ms hover transitions. 150ms toggle slides.
+ *   Sidebar: 256px expanded, 64px collapsed, 36px nav items.
+ *   Metric cards: 28-32px number, trend indicator.
+ *   Tables: sticky header, 48px rows, right-align numbers.
  * ══════════════════════════════════════════════════════════
  */
 
 :root {
-  --background: #FCFCFD;
+  --background: #F8FAFC;
   --foreground: #0F172A;
   --card: #FFFFFF;
   --card-foreground: #0F172A;
@@ -72,47 +75,58 @@
   --popover-foreground: #0F172A;
   --primary: #0F172A;
   --primary-foreground: #FFFFFF;
-  --secondary: #F8FAFC;
+  --secondary: #F1F5F9;
   --secondary-foreground: #0F172A;
   --muted: #F1F5F9;
   --muted-foreground: #64748B;
-  --accent: #059669;
+  --accent: #2563EB;
   --accent-foreground: #FFFFFF;
   --destructive: #DC2626;
-  --border: #E5E7EB;
-  --input: #E5E7EB;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
   --ring: #2563EB;
-  --chart-1: #059669;
+  --chart-1: #2563EB;
   --chart-2: #2563EB;
   --chart-3: #D97706;
   --chart-4: #0F172A;
   --chart-5: #64748B;
-  --radius: 6px;
+  --radius: 8px;
 
-  /* Sidebar — slightly off-white, not dark */
-  --sidebar: #F8FAFC;
+  /* Sidebar */
+  --sidebar: #FFFFFF;
   --sidebar-foreground: #0F172A;
-  --sidebar-primary: #059669;
+  --sidebar-primary: #0F172A;
   --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #F1F5F9;
   --sidebar-accent-foreground: #0F172A;
-  --sidebar-border: #E5E7EB;
+  --sidebar-border: #E2E8F0;
   --sidebar-ring: #2563EB;
 
-  /* Semantic financial colors */
-  --cfiq-green: #059669;
-  --cfiq-green-bg: #ECFDF5;
+  /* Semantic financial colors - NO GREEN! Using Blue instead */
+  --cfiq-green: #2563EB;
+  --cfiq-green-bg: #EFF6FF;
+  --cfiq-green-border: #BFDBFE;
   --cfiq-red: #DC2626;
   --cfiq-red-bg: #FEF2F2;
+  --cfiq-red-border: #FECACA;
   --cfiq-amber: #D97706;
   --cfiq-amber-bg: #FFFBEB;
+  --cfiq-amber-border: #FDE68A;
   --cfiq-blue: #2563EB;
   --cfiq-blue-bg: #EFF6FF;
+  --cfiq-blue-border: #BFDBFE;
+
+  /* Shadows — subtle, professional */
+  --shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
 }
 
 /* No dark mode — this is a professional tool, not a consumer app */
 .dark {
-  --background: #FCFCFD;
+  --background: #F8FAFC;
   --foreground: #0F172A;
   --card: #FFFFFF;
   --card-foreground: #0F172A;
@@ -120,28 +134,28 @@
   --popover-foreground: #0F172A;
   --primary: #0F172A;
   --primary-foreground: #FFFFFF;
-  --secondary: #F8FAFC;
+  --secondary: #F1F5F9;
   --secondary-foreground: #0F172A;
   --muted: #F1F5F9;
   --muted-foreground: #64748B;
-  --accent: #059669;
+  --accent: #2563EB;
   --accent-foreground: #FFFFFF;
   --destructive: #DC2626;
-  --border: #E5E7EB;
-  --input: #E5E7EB;
+  --border: #E2E8F0;
+  --input: #E2E8F0;
   --ring: #2563EB;
-  --chart-1: #059669;
+  --chart-1: #2563EB;
   --chart-2: #2563EB;
   --chart-3: #D97706;
   --chart-4: #0F172A;
   --chart-5: #64748B;
-  --sidebar: #F8FAFC;
+  --sidebar: #FFFFFF;
   --sidebar-foreground: #0F172A;
-  --sidebar-primary: #059669;
+  --sidebar-primary: #0F172A;
   --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #F1F5F9;
   --sidebar-accent-foreground: #0F172A;
-  --sidebar-border: #E5E7EB;
+  --sidebar-border: #E2E8F0;
   --sidebar-ring: #2563EB;
 }
 
@@ -164,12 +178,12 @@
 
 /* ── Semantic Financial Colors ── */
 @layer utilities {
-  .text-positive { color: #059669; }
+  .text-positive { color: #2563EB; }
   .text-negative { color: #DC2626; }
   .text-warning  { color: #D97706; }
   .text-info     { color: #2563EB; }
 
-  .bg-positive-subtle { background: #ECFDF5; }
+  .bg-positive-subtle { background: #EFF6FF; }
   .bg-negative-subtle { background: #FEF2F2; }
   .bg-warning-subtle  { background: #FFFBEB; }
   .bg-info-subtle     { background: #EFF6FF; }
@@ -184,6 +198,27 @@
   font-feature-settings: "tnum";
 }
 
+/* ── Clerk Overrides & Flash Fixes ── */
+.cl-rootBox * {
+  box-sizing: border-box;
+}
+.cl-userButtonPopoverCard svg, .cl-profileSection__icon {
+  max-width: 1.25rem !important;
+  max-height: 1.25rem !important;
+}
+.cl-avatarImage, .cl-userButtonAvatarBox {
+  width: 32px !important;
+  height: 32px !important;
+}
+.cl-userPreviewItemContainer svg, .cl-userButtonPopoverActionButtonIcon, .cl-userPreviewItemContainer svg path {
+  max-width: 1rem !important;
+  max-height: 1rem !important;
+}
+.cl-logoImage {
+  max-height: 2rem !important;
+  max-width: auto !important;
+}
+
 /* ── Status Health Dots ── */
 /* 8px circles, 2px glow at 20% opacity. Triage in 3 seconds. */
 .health-dot {
@@ -194,8 +229,8 @@
   flex-shrink: 0;
 }
 .health-dot-green {
-  background: #059669;
-  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.20);
+  background: #2563EB;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.20);
 }
 .health-dot-amber {
   background: #D97706;
@@ -242,30 +277,36 @@
 }
 
 /* ── Financial Table ── */
-/* 12.5px text, 6px padding, mathematical whitespace */
+/* 13px text, 48px rows for comfortable scanning, right-align numbers */
 .fin-table {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.4;
+  width: 100%;
 }
 .fin-table th {
-  padding: 8px 6px;
+  padding: 10px 8px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   color: #64748B;
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid #E2E8F0;
   text-align: right;
+  background: #F8FAFC;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .fin-table th:first-child {
   text-align: left;
 }
 .fin-table td {
-  padding: 6px;
+  padding: 10px 8px;
   text-align: right;
   font-family: "IBM Plex Mono", monospace;
   font-variant-numeric: tabular-nums;
   color: #334155;
+  height: 44px;
 }
 .fin-table td:first-child {
   text-align: left;
@@ -277,19 +318,21 @@
   transition: background-color 80ms ease;
 }
 .fin-table tbody tr:hover {
-  background-color: #FCFCFD;
+  background-color: #F8FAFC;
 }
 
 /* ── Card Surface ── */
-/* Barely-there #FCFCFD background, 1px borders, no shadows */
+/* Subtle shadow, clean border, smooth hover */
 .surface {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  transition: border-color 80ms ease;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  transition: border-color 80ms ease, box-shadow 80ms ease;
 }
 .surface:hover {
-  border-color: #D1D5DB;
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.02);
 }
 
 /* ── Balance Check Indicator ── */
@@ -355,4 +398,158 @@
 /* ── Recharts tooltip override ── */
 .recharts-tooltip-wrapper {
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.08));
+}
+
+/* ── Hover Lift ── */
+/* Subtle elevation on hover — cards, client tiles */
+.hover-lift {
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Shimmer Loading Animation ── */
+/* Content-shaped skeleton placeholders */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Metric Card ── */
+/* Fathom-style: large number, trend indicator, sublabel */
+.metric-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+.metric-card:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.02);
+}
+.metric-number {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+}
+.metric-number-sm {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: #0F172A;
+  letter-spacing: -0.01em;
+}
+
+/* ── Sidebar Nav Item ── */
+/* 36px height, 8px border-radius, 3px left accent on active */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #475569;
+  transition: background-color 80ms ease, color 80ms ease;
+  position: relative;
+  text-decoration: none;
+}
+.nav-item:hover {
+  background-color: #F1F5F9;
+  color: #0F172A;
+}
+.nav-item.active {
+  background-color: #F1F5F9;
+  color: #0F172A;
+  font-weight: 600;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: #0F172A;
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Status Badge ── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+/* ── Page Section ── */
+/* Consistent section spacing */
+.page-section {
+  margin-bottom: 24px;
+}
+
+/* ── Trend Indicator ── */
+.trend-up { color: #2563EB; }
+.trend-down { color: #DC2626; }
+.trend-neutral { color: #94A3B8; }
+
+/* ── Focus Ring ── */
+.focus-ring:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* ── Divider ── */
+.divider {
+  height: 1px;
+  background: #E2E8F0;
+  margin: 16px 0;
+}
+
+/* ── Animate In ── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slideUp 200ms ease forwards;
+}
+
+/* ── Stagger children ── */
+.stagger-children > * {
+  animation: slideUp 200ms ease forwards;
+  opacity: 0;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+
+/* ── Stagger enter (alias for single items) ── */
+.stagger-enter {
+  animation: slideUp 200ms ease forwards;
+  opacity: 0;
 }

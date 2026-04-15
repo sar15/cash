@@ -75,9 +75,15 @@ export function getRequiredSearchParam(
 
 export function handleRouteError(label: string, error: unknown) {
   if (error instanceof RouteError) {
-    return textError(error.message, error.status)
+    return NextResponse.json({ error: error.message }, { status: error.status })
   }
 
-  console.error(`[${label}]`, error)
-  return textError('Internal Error', 500)
+  console.error(JSON.stringify({
+    event: 'route_error',
+    route: label,
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3).join(' | ') : undefined,
+    ts: new Date().toISOString(),
+  }))
+  return NextResponse.json({ error: 'Internal Error' }, { status: 500 })
 }

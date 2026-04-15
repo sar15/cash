@@ -4,80 +4,101 @@ import { useEffect } from 'react'
 import { useMicroForecastStore, type MicroForecastItem } from '@/stores/micro-forecast-store'
 import { cn } from '@/lib/utils'
 import {
-  UserPlus,
-  TrendingUp,
-  Package,
-  Landmark,
-  ToggleLeft,
-  ToggleRight,
-  Trash2,
-  Loader2,
+  UserPlus, TrendingUp, Package, Landmark,
+  ToggleLeft, ToggleRight, Trash2, Loader2,
+  Receipt, TrendingDown, Plus,
 } from 'lucide-react'
+import { formatAuto } from '@/lib/utils/indian-format'
 
-const typeIcons = {
-  hire: UserPlus,
-  revenue: TrendingUp,
-  asset: Package,
-  loan: Landmark,
-}
-
-const typeColors = {
-  hire: 'text-blue-400',
-  revenue: 'text-emerald-400',
-  asset: 'text-amber-400',
-  loan: 'text-purple-400',
+const typeConfig: Record<string, { icon: typeof UserPlus; color: string; bg: string; border: string; label: string }> = {
+  hire:         { icon: UserPlus,     color: 'text-[#2563EB]', bg: 'bg-[#EFF6FF]', border: 'border-[#BFDBFE]', label: 'New Hire' },
+  revenue:      { icon: TrendingUp,   color: 'text-[#059669]', bg: 'bg-[#ECFDF5]', border: 'border-[#A7F3D0]', label: 'Revenue' },
+  asset:        { icon: Package,      color: 'text-[#D97706]', bg: 'bg-[#FFFBEB]', border: 'border-[#FDE68A]', label: 'Asset' },
+  loan:         { icon: Landmark,     color: 'text-[#7C3AED]', bg: 'bg-[#F5F3FF]', border: 'border-[#DDD6FE]', label: 'Loan' },
+  expense:      { icon: Receipt,      color: 'text-[#DC2626]', bg: 'bg-[#FEF2F2]', border: 'border-[#FECACA]', label: 'Expense' },
+  price_change: { icon: TrendingDown, color: 'text-[#0891B2]', bg: 'bg-[#ECFEFF]', border: 'border-[#A5F3FC]', label: 'Price Change' },
 }
 
 function EventCard({ item }: { item: MicroForecastItem }) {
   const toggleActive = useMicroForecastStore((s) => s.toggleActive)
   const removeItem = useMicroForecastStore((s) => s.removeItem)
-  const Icon = typeIcons[item.type]
+  const cfg = typeConfig[item.type] ?? typeConfig.revenue
+  const Icon = cfg.icon
+
+  // Compute total cash impact
+  const totalCashImpact = item.microForecast.lines.reduce(
+    (sum, line) => sum + line.cashImpacts.reduce((s, v) => s + v, 0), 0
+  )
+  const totalPlImpact = item.microForecast.lines.reduce(
+    (sum, line) => sum + line.plImpacts.reduce((s, v) => s + v, 0), 0
+  )
 
   return (
-    <div
-      className={cn(
-        'group rounded-2xl border p-4 transition-all',
-        item.isActive
-          ? 'border-white/10 bg-white/5'
-          : 'border-white/5 bg-slate-950/50 opacity-55'
-      )}
-    >
-      <div className="flex items-start justify-between">
+    <div className={cn(
+      'group rounded-lg border p-3 transition-all duration-[80ms]',
+      item.isActive
+        ? 'border-[#E2E8F0] bg-white hover:border-[#CBD5E1]'
+        : 'border-[#E2E8F0] bg-[#F8FAFC] opacity-60'
+    )}>
+      <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2.5">
-          <div className="rounded-xl border border-white/8 bg-slate-950/60 p-2">
-            <Icon className={cn('h-4 w-4 shrink-0', typeColors[item.type])} />
+          <div className={cn('mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border', cfg.bg, cfg.border)}>
+            <Icon className={cn('h-3.5 w-3.5', cfg.color)} />
           </div>
-          <div>
-            <p className="text-sm font-medium text-white">{item.name}</p>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{item.type} • {item.startMonth}</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-[#0F172A]">{item.name}</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#94A3B8]">
+              {cfg.label} · from {item.startMonth}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             onClick={() => toggleActive(item.id)}
-            className="rounded p-1 text-slate-400 hover:text-white"
+            className="rounded p-1 text-[#94A3B8] hover:text-[#0F172A] transition-colors"
             title={item.isActive ? 'Deactivate' : 'Activate'}
           >
-            {item.isActive ? (
-              <ToggleRight className="h-4 w-4 text-emerald-400" />
-            ) : (
-              <ToggleLeft className="h-4 w-4" />
-            )}
+            {item.isActive
+              ? <ToggleRight className="h-4 w-4 text-[#059669]" />
+              : <ToggleLeft className="h-4 w-4" />
+            }
           </button>
           <button
             onClick={() => removeItem(item.id)}
-            className="rounded p-1 text-slate-400 hover:text-red-400"
+            className="rounded p-1 text-[#94A3B8] hover:text-[#DC2626] transition-colors"
             title="Remove"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
+
+      {/* Impact preview */}
+      {item.isActive && (totalCashImpact !== 0 || totalPlImpact !== 0) && (
+        <div className="mt-2 flex items-center gap-3 border-t border-[#F1F5F9] pt-2">
+          {totalPlImpact !== 0 && (
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-[#94A3B8]">P&L</span>
+              <span className={cn('font-num text-[11px] font-semibold', totalPlImpact > 0 ? 'text-[#059669]' : 'text-[#DC2626]')}>
+                {totalPlImpact > 0 ? '+' : ''}{formatAuto(totalPlImpact)}
+              </span>
+            </div>
+          )}
+          {totalCashImpact !== 0 && (
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-[#94A3B8]">Cash</span>
+              <span className={cn('font-num text-[11px] font-semibold', totalCashImpact > 0 ? 'text-[#059669]' : 'text-[#DC2626]')}>
+                {totalCashImpact > 0 ? '+' : ''}{formatAuto(totalCashImpact)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-export function BusinessEventsList({ companyId }: { companyId: string }) {
+export function BusinessEventsList({ companyId, inline }: { companyId: string; inline?: boolean }) {
   const items = useMicroForecastStore((s) => s.items)
   const isLoading = useMicroForecastStore((s) => s.isLoading)
   const loadItems = useMicroForecastStore((s) => s.loadItems)
@@ -89,26 +110,63 @@ export function BusinessEventsList({ companyId }: { companyId: string }) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-6">
-        <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+        <Loader2 className="h-4 w-4 animate-spin text-[#059669]" />
+      </div>
+    )
+  }
+
+  // Inline mode — horizontal strip for the forecast page bottom bar
+  if (inline) {
+    if (items.length === 0) {
+      return (
+        <span className="text-xs text-[#94A3B8]">No events yet — click &ldquo;Add Event&rdquo; to model hires, loans, new clients</span>
+      )
+    }
+    return (
+      <div className="flex items-center gap-2">
+        {items.map((item) => {
+          const cfg = typeConfig[item.type] ?? typeConfig.revenue
+          const Icon = cfg.icon
+          return (
+            <div key={item.id} className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
+              item.isActive ? `${cfg.bg} ${cfg.border} ${cfg.color}` : 'border-[#E2E8F0] bg-[#F8FAFC] text-[#94A3B8]'
+            )}>
+              <Icon className="h-3 w-3" />
+              {item.name}
+            </div>
+          )
+        })}
       </div>
     )
   }
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center">
-        <p className="text-xs text-slate-500">
-          No business events yet. Click &quot;Add Event&quot; to model what-if scenarios.
+      <div className="rounded-lg border border-dashed border-[#E2E8F0] bg-[#F8FAFC] p-5 text-center">
+        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-[#F1F5F9]">
+          <Plus className="h-4 w-4 text-[#94A3B8]" />
+        </div>
+        <p className="text-xs font-medium text-[#475569]">No business events yet</p>
+        <p className="mt-0.5 text-[11px] text-[#94A3B8]">
+          Click &ldquo;Add Event&rdquo; to model hires, loans, new clients.
         </p>
       </div>
     )
   }
 
+  const activeCount = items.filter(i => i.isActive).length
+
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-        Business Events ({items.length})
-      </h3>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#94A3B8]">
+          Events ({items.length})
+        </p>
+        {activeCount < items.length && (
+          <p className="text-[11px] text-[#94A3B8]">{activeCount} active</p>
+        )}
+      </div>
       {items.map((item) => (
         <EventCard key={item.id} item={item} />
       ))}

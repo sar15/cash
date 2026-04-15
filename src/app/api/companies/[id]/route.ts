@@ -3,7 +3,7 @@ import { type NextRequest } from 'next/server'
 import { deleteCompany, updateCompany } from '@/lib/db/queries/companies'
 import { updateCompanySchema } from '@/lib/db/validation'
 import { handleRouteError, jsonResponse, noContent, parseJsonBody } from '@/lib/server/api'
-import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
+import { requireOwnedCompany, requireAccessibleCompany, requireUserId } from '@/lib/server/auth'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
-    const company = await requireOwnedCompany(userId, id)
+    const company = await requireAccessibleCompany(userId, id)
 
     return jsonResponse({ company })
   } catch (error) {

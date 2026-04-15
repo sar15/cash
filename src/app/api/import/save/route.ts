@@ -3,6 +3,10 @@ import { type NextRequest } from 'next/server'
 import { z } from 'zod'
 
 import { db, schema } from '@/lib/db'
+import { deleteFile } from '@/lib/r2'
+import { inngest } from '@/lib/inngest/client'
+import { writeAuditLog } from '@/lib/db/queries/audit-log'
+import { createNotification } from '@/lib/db/queries/notifications'
 import { handleRouteError, jsonResponse, parseJsonBody, RouteError } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
@@ -25,6 +29,7 @@ const importActualSchema = z.object({
 
 const importSaveRequestSchema = z.object({
   companyId: z.string().uuid(),
+  fileKey: z.string().optional(), // R2 key to delete after successful save
   accounts: z.array(importAccountSchema).min(1).max(500),
   actuals: z.array(importActualSchema).min(1).max(5000),
   replaceExisting: z.boolean().default(false),
@@ -172,6 +177,37 @@ export async function POST(request: NextRequest) {
         savedActuals,
       }
     })
+
+    // Fire background recompute event (non-critical)
+    inngest.send({
+      name: 'forecast/config.updated',
+      data: { companyId: company.id, changeType: 'import' },
+    }).catch(() => {})
+
+    // Audit log + notification (non-blocking)
+    writeAuditLog({
+      companyId: company.id,
+      clerkUserId: userId,
+      action: 'import.completed',
+      entityType: 'import',
+      newValue: { accounts: result.createdAccounts + result.updatedAccounts, actuals: result.savedActuals },
+    }).catch(() => {})
+
+    createNotification({
+      companyId: company.id,
+      clerkUserId: userId,
+      type: 'import_complete',
+      title: 'Import complete',
+      body: `${result.createdAccounts + result.updatedAccounts} accounts and ${result.savedActuals} actuals imported`,
+      actionUrl: '/forecast',
+    }).catch(() => {})
+
+    // Clean up uploaded file from R2 after successful save (fire-and-forget)
+    if (body.fileKey) {
+      deleteFile(body.fileKey).catch(() => {
+        console.warn('[IMPORT_SAVE] Failed to delete uploaded file:', body.fileKey)
+      })
+    }
 
     return jsonResponse({
       companyId: company.id,

@@ -23,7 +23,6 @@ export const metadata: Metadata = {
     "Three-way integrated forecasting platform. Upload P&L + Balance Sheet, get a 12-month Projected P&L, Balance Sheet & Cash Flow Statement with GST/TDS compliance.",
   applicationName: "CashFlowIQ",
   keywords: ["financial forecasting", "indian sme", "cash flow", "balance sheet", "P&L"],
-  manifest: "/manifest.json",
 }
 
 export const viewport: Viewport = {

@@ -18,6 +18,7 @@ export interface Company {
   currency: string
   numberFormat: string
   logoUrl?: string | null
+  lockedPeriods?: string | null // JSON array of YYYY-MM-01 strings
   createdAt?: string
   updatedAt?: string
 }

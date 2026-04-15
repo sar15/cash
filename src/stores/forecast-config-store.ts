@@ -128,8 +128,6 @@ export const useForecastConfigStore = create<ForecastConfigState>((set, get) => 
 
   load: async (companyId) => {
     if (get().isLoading) return
-    // Allow retry if previous load failed
-    const hasError = !!get().error
     set({ isLoading: true, error: null })
     try {
       const config = await apiGet<{

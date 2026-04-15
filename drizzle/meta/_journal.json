@@ -8,6 +8,20 @@
       "when": 1775560927127,
       "tag": "0000_dark_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1776076490531,
+      "tag": "0001_grey_mariko_yashida",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776077049279,
+      "tag": "0002_funny_turbo",
+      "breakpoints": true
     }
   ]
 }
