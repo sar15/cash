@@ -26,7 +26,9 @@ export const companies = sqliteTable(
     numberFormat: text('number_format').default('lakhs'),
     logoUrl: text('logo_url'),
     isPrimary: integer('is_primary', { mode: 'boolean' }).default(false),
-    lockedPeriods: text('locked_periods').default('[]'), // JSON array of YYYY-MM-01 strings
+    // Single date boundary: everything on/before this date is locked actuals, everything after is forecast.
+    // Replaces the fragile lockedPeriods JSON array — simpler, corruption-proof.
+    booksClosedDate: text('books_closed_date'), // YYYY-MM-01 or null (nothing locked)
     createdAt: text('created_at').default(sql`(datetime('now'))`),
     updatedAt: text('updated_at').default(sql`(datetime('now'))`),
   },
@@ -353,6 +355,29 @@ export const complianceConfig = sqliteTable('compliance_config', {
 })
 
 // ============================================================
+// TAX RATE HISTORY — effective-dated compliance rates
+// Prevents Budget Day changes from retroactively corrupting historical forecasts.
+// The engine picks the rate whose effectiveFrom <= forecastPeriod (latest wins).
+// ============================================================
+export const taxRateHistory = sqliteTable(
+  'tax_rate_history',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    rateType: text('rate_type').notNull(), // 'gst' | 'corporate_tax' | 'itc_pct'
+    rate: real('rate').notNull(),          // e.g. 18.0, 25.17, 85.0
+    effectiveFrom: text('effective_from').notNull(), // YYYY-MM-01
+    notes: text('notes'),                  // e.g. "Finance Act 2025 — Budget Day update"
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_tax_rate_history_company').on(table.companyId, table.rateType, table.effectiveFrom),
+  ]
+)
+
+// ============================================================
 // FORECAST RESULTS (cached for persistence)
 // ============================================================
 export const forecastResults = sqliteTable(
@@ -370,6 +395,8 @@ export const forecastResults = sqliteTable(
     cfData: text('cf_data').notNull().default('{}'),
     compliance: text('compliance').notNull().default('{}'),
     metrics: text('metrics').notNull().default('{}'),
+    // 'ready' = safe to read/export | 'stale' = inputs changed, recompute pending | 'calculating' = Inngest job running
+    status: text('status').notNull().default('ready'), // 'ready' | 'stale' | 'calculating'
     version: integer('version').default(1),
     createdAt: text('created_at').default(sql`(datetime('now'))`),
   },
@@ -533,6 +560,7 @@ export const companiesRelations = relations(companies, ({ many, one }) => ({
   notifications: many(notifications),
   members: many(companyMembers),
   compliancePayments: many(compliancePayments),
+  taxRateHistory: many(taxRateHistory),
   complianceConfig: one(complianceConfig, {
     fields: [companies.id],
     references: [complianceConfig.companyId],
@@ -699,6 +727,13 @@ export const compliancePaymentsRelations = relations(compliancePayments, ({ one 
 export const idempotencyKeysRelations = relations(idempotencyKeys, ({ one }) => ({
   company: one(companies, {
     fields: [idempotencyKeys.companyId],
+    references: [companies.id],
+  }),
+}))
+
+export const taxRateHistoryRelations = relations(taxRateHistory, ({ one }) => ({
+  company: one(companies, {
+    fields: [taxRateHistory.companyId],
     references: [companies.id],
   }),
 }))

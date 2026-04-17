@@ -203,6 +203,12 @@ export async function POST(request: NextRequest) {
       data: { companyId: company.id, changeType: 'import' },
     }).catch(() => {})
 
+    // Mark forecast stale immediately so UI shows recalculating state
+    // (Inngest job will set it back to 'ready' when done)
+    import('@/lib/db/queries/forecast-results').then(({ markForecastStale }) => {
+      markForecastStale(company.id).catch(() => {})
+    }).catch(() => {})
+
     // Audit log + notification (non-blocking)
     writeAuditLog({
       companyId: company.id,

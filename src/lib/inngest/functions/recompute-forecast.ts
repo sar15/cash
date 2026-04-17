@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { runScenarioForecastEngine } from '@/lib/engine/scenarios/engine'
 import type { AccountInput } from '@/lib/engine'
 import { buildForecastMonthLabels } from '@/lib/forecast-periods'
-import { upsertForecastResult } from '@/lib/db/queries/forecast-results'
+import { upsertForecastResult, markForecastCalculating } from '@/lib/db/queries/forecast-results'
 import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import type { AnyTimingProfileConfig } from '@/lib/engine/timing-profiles/types'
 
@@ -35,6 +35,11 @@ export const recomputeForecast = inngest.createFunction(
       })
 
     if (!accounts || accounts.length === 0) return { skipped: true, reason: 'no accounts' }
+
+    // Mark as calculating so the UI can show a spinner and block PDF export
+    await step.run('mark-calculating', async () => {
+      return markForecastCalculating(companyId, null)
+    })
 
     const historicalMonths: string[] = [
       ...new Set((actuals as Array<{ period: string }>).map(a => a.period))

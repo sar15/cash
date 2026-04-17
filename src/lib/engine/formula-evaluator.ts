@@ -93,7 +93,8 @@ function evaluateForMonth(
     const fn = new Function('Math', `"use strict"; return (${safeExpr})`)
     const result = fn(Math) as unknown
     if (typeof result !== 'number' || !isFinite(result) || isNaN(result)) return null
-    return result
+    // Round to avoid IEEE 754 float drift accumulating across months
+    return Math.round(result * 1e6) / 1e6
   } catch {
     return null
   }

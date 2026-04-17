@@ -7,6 +7,7 @@ import { handleRouteError, jsonResponse, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 import { writeAuditLog } from '@/lib/db/queries/audit-log'
 import { inngest } from '@/lib/inngest/client'
+import { markForecastStale } from '@/lib/db/queries/forecast-results'
 
 const requestSchema = z.object({
   companyId: z.string().uuid(),
@@ -24,6 +25,9 @@ export async function PATCH(request: NextRequest) {
       autoDerived: body.autoDerived,
       isDefault: body.isDefault,
     })
+
+    // Mark forecast stale immediately so UI can show recalculating state
+    markForecastStale(company.id).catch(() => {})
 
     // Audit log (non-blocking)
     writeAuditLog({

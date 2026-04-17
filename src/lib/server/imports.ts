@@ -1,4 +1,5 @@
 import { parseExcelBuffer } from '@/lib/import/excel-parser'
+import { isTallyXml, parseTallyXml } from '@/lib/import/tally-parser'
 import {
   mapServerAccountDetailed,
   type ServerAccountMatchType,
@@ -134,7 +135,10 @@ function buildWarnings(rows: PreviewRow[], structure: ColumnMap) {
 }
 
 export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName?: string) {
-  const sheets = await parseExcelBuffer(buffer)
+  // Auto-detect Tally XML — route to dedicated parser before trying Excel/CSV
+  const sheets = isTallyXml(buffer)
+    ? await parseTallyXml(buffer)
+    : await parseExcelBuffer(buffer)
   if (sheets.length === 0) {
     throw new RouteError(422, 'No readable sheets were found in the uploaded file.')
   }

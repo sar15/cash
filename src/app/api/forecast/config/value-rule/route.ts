@@ -6,6 +6,7 @@ import { upsertValueRuleSchema } from '@/lib/db/validation'
 import { handleRouteError, jsonResponse, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 import { inngest } from '@/lib/inngest/client'
+import { markForecastStale } from '@/lib/db/queries/forecast-results'
 import { writeAuditLog } from '@/lib/db/queries/audit-log'
 import { createNotification } from '@/lib/db/queries/notifications'
 
@@ -30,6 +31,9 @@ export async function PATCH(request: NextRequest) {
       config: JSON.stringify(body.config),
       sortOrder: body.sortOrder,
     })
+
+    // Mark forecast stale immediately so UI can show recalculating state
+    markForecastStale(company.id).catch(() => {})
 
     // Write audit log (non-blocking)
     writeAuditLog({

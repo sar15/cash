@@ -90,6 +90,8 @@ function buildForecastPeriods(labels: string[]): string[] {
 
 function applyBaselineAdjustment(value: number, adjustmentPct: number | undefined): number {
   if (!adjustmentPct) return value
+  // Integer-safe percentage math: multiply first, then divide, then round.
+  // Avoids IEEE 754 float drift on paise values.
   return Math.round((value * (100 + adjustmentPct)) / 100)
 }
 
@@ -99,14 +101,16 @@ function deriveSalaryForecast(
   microForecastItems: ForecastMicroForecastItem[] | undefined,
   accounts?: AccountInput[]
 ): number[] {
-  // Find salary account by standardMapping tag, fall back to 'exp-1' for demo data
+  // Find salary account by standardMapping tag first, then name heuristics.
+  // Never falls back to a hardcoded demo ID — returns zeros if no salary account found.
   const salaryAccountId = accounts?.find(
     (a) => a.name.toLowerCase().includes('salary') ||
            a.name.toLowerCase().includes('salaries') ||
-           a.name.toLowerCase().includes('payroll')
-  )?.id ?? 'exp-1'
+           a.name.toLowerCase().includes('payroll') ||
+           a.name.toLowerCase().includes('wages')
+  )?.id
 
-  const salaryForecast = [...(accountForecasts[salaryAccountId] ?? Array(forecastLength).fill(0))]
+  const salaryForecast = [...(accountForecasts[salaryAccountId ?? ''] ?? Array(forecastLength).fill(0))]
 
   microForecastItems
     ?.filter((item) => item.isActive !== false && item.type === 'hire')

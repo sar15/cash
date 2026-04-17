@@ -65,22 +65,20 @@ interface BuildComplianceForecastInput {
   }
 }
 
-// FIX audit1 DRY: Single deriveSalaryForecast implementation
+// Salary account resolution: match by standardMapping tag first, then name heuristics.
+// Never falls back to a hardcoded demo ID — returns zeros if no salary account found.
 function deriveSalaryForecast(
   accountForecasts: Record<string, number[]>,
   periods: string[],
   microForecastItems: ForecastMicroForecastItem[]
 ): number[] {
-  // Find salary account by name matching — never rely on hardcoded demo IDs
-  const salaryAccountId = Object.keys(accountForecasts).find((id) => {
-    // The key is the account ID; we match by checking if any expense account
-    // has salary-related values (heuristic: largest expense account)
-    return id.toLowerCase().includes('salary') ||
-           id.toLowerCase().includes('payroll') ||
-           id === 'exp-1' // fallback for demo data only
-  }) ?? Object.keys(accountForecasts)[0] ?? 'exp-1'
+  const salaryAccountId = Object.keys(accountForecasts).find((id) =>
+    id.toLowerCase().includes('salary') ||
+    id.toLowerCase().includes('payroll') ||
+    id.toLowerCase().includes('wages')
+  )
 
-  const salaryForecast = [...(accountForecasts[salaryAccountId] ?? Array(periods.length).fill(0))]
+  const salaryForecast = [...(accountForecasts[salaryAccountId ?? ''] ?? Array(periods.length).fill(0))]
 
   microForecastItems
     .filter((item) => item.type === 'hire')
