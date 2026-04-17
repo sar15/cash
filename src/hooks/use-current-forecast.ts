@@ -178,7 +178,9 @@ export function useCurrentForecast(): ForecastData {
   const complianceConfig = useForecastConfigStore((s) => s.complianceConfig)
   const microForecastItems = useMicroForecastStore((s) => s.items)
   const selectedScenario = useScenarioStore((s) => s.selectedScenario())
-  const sensitivity = useSensitivityStore()
+  const sensitivityRevenueAdjPct = useSensitivityStore((s) => s.revenueAdjPct)
+  const sensitivityExpenseAdjPct = useSensitivityStore((s) => s.expenseAdjPct)
+  const sensitivityIsActive = useSensitivityStore((s) => s.isActive)
 
   const forecastMonths = useMemo(
     () =>
@@ -210,12 +212,12 @@ export function useCurrentForecast(): ForecastData {
       // Revenue accounts get revenueAdjPct, expense accounts get expenseAdjPct.
       // AR delay is handled via a timing profile override on receivable accounts.
       const sensitivityAdjustments: Array<{ accountId: string; adjustmentPct: number }> = []
-      if (sensitivity.isActive) {
+      if (sensitivityIsActive) {
         for (const acc of accountInputs) {
-          if (acc.category === 'Revenue' && sensitivity.revenueAdjPct !== 0) {
-            sensitivityAdjustments.push({ accountId: acc.id, adjustmentPct: sensitivity.revenueAdjPct })
-          } else if ((acc.category === 'COGS' || acc.category === 'Operating Expenses') && sensitivity.expenseAdjPct !== 0) {
-            sensitivityAdjustments.push({ accountId: acc.id, adjustmentPct: sensitivity.expenseAdjPct })
+          if (acc.category === 'Revenue' && sensitivityRevenueAdjPct !== 0) {
+            sensitivityAdjustments.push({ accountId: acc.id, adjustmentPct: sensitivityRevenueAdjPct })
+          } else if ((acc.category === 'COGS' || acc.category === 'Operating Expenses') && sensitivityExpenseAdjPct !== 0) {
+            sensitivityAdjustments.push({ accountId: acc.id, adjustmentPct: sensitivityExpenseAdjPct })
           }
         }
       }
@@ -235,7 +237,7 @@ export function useCurrentForecast(): ForecastData {
             timingProfileOverrides: [],
             microForecastToggles: [],
           }
-        : sensitivity.isActive && sensitivityAdjustments.length > 0
+        : sensitivityIsActive && sensitivityAdjustments.length > 0
         ? {
             id: '__sensitivity__',
             name: 'What-If',
@@ -278,7 +280,9 @@ export function useCurrentForecast(): ForecastData {
     microForecastItems,
     selectedScenario,
     getHistoricalValues,
-    sensitivity,
+    sensitivityIsActive,
+    sensitivityRevenueAdjPct,
+    sensitivityExpenseAdjPct,
   ])
 
   // Persist result to DB (debounced 800ms) so next load is instant

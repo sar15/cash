@@ -146,7 +146,7 @@ export default function DashboardPage() {
   const dashboardData = useMemo(() => {
     const baselineMonths = engineResult?.rawIntegrationResults ?? []
     if (baselineMonths.length === 0) {
-      return { cashPosition: 0, runway: 0, netIncome: 0, wcDays: 0, grossMarginPct: 0, operatingCashFlow: 0, freeCashFlow: 0, monthlyBurn: 0 }
+      return { cashPosition: 0, runway: 0, netIncome: 0, wcDays: 0, grossMarginPct: 0, operatingCashFlow: 0, freeCashFlow: 0, monthlyBurn: 0, negativeCashMonth: null as null | { label: string; balance: number } }
     }
 
     const lastMonth = baselineMonths[baselineMonths.length - 1]
@@ -186,8 +186,15 @@ export default function DashboardPage() {
     const monthlyRev = baselineMonths[baselineMonths.length - 1]?.pl?.revenue ?? 1
     const wcDays = Math.round(((ar - ap) / (Math.abs(monthlyRev) || 1)) * 30)
 
-    return { cashPosition, runway, netIncome, wcDays, grossMarginPct, operatingCashFlow, freeCashFlow, monthlyBurn: effectiveBurn ?? 0 }
-  }, [engineResult])
+    // Projected negative cash — check next 3 months
+    const next3 = baselineMonths.slice(0, 3)
+    const firstNegIdx = next3.findIndex(m => (m?.bs?.cash ?? 0) < 0)
+    const negativeCashMonth = firstNegIdx !== -1
+      ? { label: forecastMonths[firstNegIdx] ?? `Month ${firstNegIdx + 1}`, balance: next3[firstNegIdx]?.bs?.cash ?? 0 }
+      : null
+
+    return { cashPosition, runway, netIncome, wcDays, grossMarginPct, operatingCashFlow, freeCashFlow, monthlyBurn: effectiveBurn ?? 0, negativeCashMonth }
+  }, [engineResult, forecastMonths])
 
   const complianceItems = useMemo(() => {
     const compliance = engineResult?.compliance
@@ -299,31 +306,23 @@ export default function DashboardPage() {
       />
 
       {/* Projected negative cash alert — shown when any of the next 3 months goes negative */}
-      {(() => {
-        const months = engineResult?.rawIntegrationResults ?? []
-        const next3 = months.slice(0, 3)
-        const firstNegative = next3.findIndex(m => (m?.bs?.cash ?? 0) < 0)
-        if (firstNegative === -1) return null
-        const label = forecastMonths[firstNegative] ?? `Month ${firstNegative + 1}`
-        const balance = next3[firstNegative]?.bs?.cash ?? 0
-        return (
-          <div className="flex items-start gap-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626]" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-[#991B1B]">
-                ⚠️ Projected cash balance drops below zero in {label}
-              </p>
-              <p className="mt-1 text-xs text-[#64748B]">
-                Projected balance: <span className="font-semibold text-[#DC2626]">{formatAuto(balance)}</span>
-                {' · '}Take action now to extend runway.
-              </p>
-            </div>
-            <Link href="/forecast" className="shrink-0 text-xs font-semibold text-[#DC2626] hover:underline">
-              View forecast →
-            </Link>
+      {dashboardData.negativeCashMonth && (
+        <div className="flex items-start gap-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626]" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#991B1B]">
+              ⚠️ Projected cash balance drops below zero in {dashboardData.negativeCashMonth.label}
+            </p>
+            <p className="mt-1 text-xs text-[#64748B]">
+              Projected balance: <span className="font-semibold text-[#DC2626]">{formatAuto(dashboardData.negativeCashMonth.balance)}</span>
+              {' · '}Take action now to extend runway.
+            </p>
           </div>
-        )
-      })()}
+          <Link href="/forecast" className="shrink-0 text-xs font-semibold text-[#DC2626] hover:underline">
+            View forecast →
+          </Link>
+        </div>
+      )}
 
       {/* Cash alert */}
       {dashboardData.cashPosition > 0 && complianceItems.length > 0 && (
