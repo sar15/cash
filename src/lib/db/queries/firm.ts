@@ -3,6 +3,7 @@ import { companies, companyMembers, forecastResults, gstFilings } from '@/lib/db
 import { eq, and, isNull } from 'drizzle-orm'
 import { getFirmClientCompanies } from '@/lib/db/queries/firms'
 import { getOrCreateUserProfile } from '@/lib/db/queries/user-profiles'
+import { todayISTString } from '@/lib/utils/ist'
 
 export interface FirmCompanySummary {
   id: string
@@ -49,7 +50,9 @@ export async function getFirmCompanies(clerkUserId: string): Promise<FirmCompany
     }
   }
 
-  const today = new Date()
+  // Use IST today — Vercel runs UTC, India is UTC+5:30
+  const todayStr = todayISTString()
+  const todayMs = new Date(todayStr).getTime()
 
   const summaries: FirmCompanySummary[] = await Promise.all(
     allCompanies.map(async (company) => {
@@ -111,7 +114,7 @@ export async function getFirmCompanies(clerkUserId: string): Promise<FirmCompany
       })
       const dueSoon = pendingFilings.filter(f => {
         const due = new Date(f.dueDate)
-        const daysUntilDue = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        const daysUntilDue = (due.getTime() - todayMs) / (1000 * 60 * 60 * 24)
         return daysUntilDue <= 7
       })
 

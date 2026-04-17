@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { gstFilings } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import type { ComplianceResult } from '@/lib/engine/compliance'
+import { todayISTString } from '@/lib/utils/ist'
 
 /**
  * Auto-populate GST filings from compliance engine result
@@ -38,9 +39,11 @@ export async function populateGSTFilings(
     gstr3bDueDate.setMonth(gstr3bDueDate.getMonth() + 1)
     gstr3bDueDate.setDate(20)
 
-    const today = new Date()
+    // Use IST today — Vercel runs UTC, India is UTC+5:30
+    const todayStr = todayISTString()
     const getStatus = (dueDate: Date) => {
-      return dueDate < today ? 'overdue' : 'pending'
+      const dueDateStr = dueDate.toISOString().split('T')[0]
+      return dueDateStr < todayStr ? 'overdue' : 'pending'
     }
 
     filings.push({
