@@ -9,6 +9,12 @@ import { writeAuditLog } from '@/lib/db/queries/audit-log'
 import { createNotification } from '@/lib/db/queries/notifications'
 import { handleRouteError, jsonResponse, parseJsonBody, RouteError } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
+import {
+  findIdempotentResponse,
+  getIdempotencyKey,
+  saveIdempotentResponse,
+  toIdempotencyResponse,
+} from '@/lib/server/idempotency'
 
 const importAccountSchema = z.object({
   name: z.string().min(1),
@@ -78,6 +84,19 @@ export async function POST(request: NextRequest) {
     const userId = await requireUserId()
     const body = await parseJsonBody(request, importSaveRequestSchema)
     const company = await requireOwnedCompany(userId, body.companyId)
+
+    // Idempotency: if the client sends an Idempotency-Key header, return the
+    // cached response for duplicate submissions (e.g. double-click, retry on slow connection)
+    const idempotencyKey = getIdempotencyKey(request)
+    if (idempotencyKey) {
+      const cached = await findIdempotentResponse({
+        key: idempotencyKey,
+        companyId: company.id,
+        route: '/api/import/save',
+        method: 'POST',
+      })
+      if (cached) return toIdempotencyResponse(cached)
+    }
 
     const result = await db.transaction(async (tx) => {
       const existingAccounts = await tx.query.accounts.findMany({
@@ -197,6 +216,12 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Mark onboarding complete on first real import (fire-and-forget)
+    db.update(schema.userProfiles)
+      .set({ onboardingCompleted: true })
+      .where(eq(schema.userProfiles.clerkUserId, userId))
+      .catch(() => {})
+
     // Fire background recompute event (non-critical)
     inngest.send({
       name: 'forecast/config.updated',
@@ -234,10 +259,21 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return jsonResponse({
+    const responseBody = {
       companyId: company.id,
       ...result,
-    })
+    }
+
+    // Cache the response for idempotent retries (fire-and-forget)
+    if (idempotencyKey) {
+      saveIdempotentResponse(
+        { key: idempotencyKey, companyId: company.id, route: '/api/import/save', method: 'POST' },
+        200,
+        responseBody
+      ).catch(() => {})
+    }
+
+    return jsonResponse(responseBody)
   } catch (error) {
     return handleRouteError('IMPORT_SAVE_POST', error)
   }

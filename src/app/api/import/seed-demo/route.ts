@@ -122,6 +122,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Mark onboarding as completed so the blank-canvas empty state
+    // doesn't show again on next login (fire-and-forget, non-blocking)
+    db.update(schema.userProfiles)
+      .set({ onboardingCompleted: true })
+      .where(eq(schema.userProfiles.clerkUserId, userId))
+      .catch(() => {})
+
     return jsonResponse({
       companyId,
       seeded: true,
