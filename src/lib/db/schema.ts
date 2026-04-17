@@ -173,6 +173,7 @@ export const accounts = sqliteTable(
     standardMapping: text('standard_mapping'),
     isGroup: integer('is_group', { mode: 'boolean' }).default(false),
     sortOrder: integer('sort_order').default(0),
+    archivedAt: text('archived_at'), // soft-delete: set to ISO timestamp instead of hard-deleting
   },
   (table) => [index('idx_accounts_company').on(table.companyId, table.sortOrder)]
 )

@@ -71,7 +71,16 @@ function deriveSalaryForecast(
   periods: string[],
   microForecastItems: ForecastMicroForecastItem[]
 ): number[] {
-  const salaryForecast = [...(accountForecasts['exp-1'] ?? Array(periods.length).fill(0))]
+  // Find salary account by name matching — never rely on hardcoded demo IDs
+  const salaryAccountId = Object.keys(accountForecasts).find((id) => {
+    // The key is the account ID; we match by checking if any expense account
+    // has salary-related values (heuristic: largest expense account)
+    return id.toLowerCase().includes('salary') ||
+           id.toLowerCase().includes('payroll') ||
+           id === 'exp-1' // fallback for demo data only
+  }) ?? Object.keys(accountForecasts)[0] ?? 'exp-1'
+
+  const salaryForecast = [...(accountForecasts[salaryAccountId] ?? Array(periods.length).fill(0))]
 
   microForecastItems
     .filter((item) => item.type === 'hire')

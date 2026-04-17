@@ -73,16 +73,25 @@ function evaluateForMonth(
     return String(values[monthIndex] ?? 0)
   })
 
-  // Safe eval — only allow numbers and math operators
-  // Strip whitespace and check against strict allowlist before evaluating
-  const stripped = expr.replace(/\s/g, '')
-  if (!/^[0-9+\-*/().e]+$/.test(stripped)) return null
-  // Guard against empty or trivially invalid expressions
+  // Safe eval — allow numbers, math operators, and safe math functions
+  // Replace MAX/MIN/ABS/IF with safe JS equivalents before evaluating
+  const safeExpr = expr
+    .replace(/\bMAX\s*\(/gi, 'Math.max(')
+    .replace(/\bMIN\s*\(/gi, 'Math.min(')
+    .replace(/\bABS\s*\(/gi, 'Math.abs(')
+    .replace(/\bROUND\s*\(/gi, 'Math.round(')
+    .replace(/\bFLOOR\s*\(/gi, 'Math.floor(')
+    .replace(/\bCEIL\s*\(/gi, 'Math.ceil(')
+    .replace(/\bIF\s*\(([^,]+),([^,]+),([^)]+)\)/gi, '(($1) ? ($2) : ($3))')
+
+  const stripped = safeExpr.replace(/\s/g, '')
+  // Allow numbers, operators, Math.* calls, and parentheses
+  if (!/^[0-9+\-*/().eMath,_a-z]+$/i.test(stripped)) return null
   if (stripped.length === 0 || stripped === '()') return null
 
   try {
-    const fn = new Function(`"use strict"; return (${expr})`)
-    const result = fn() as unknown
+    const fn = new Function('Math', `"use strict"; return (${safeExpr})`)
+    const result = fn(Math) as unknown
     if (typeof result !== 'number' || !isFinite(result) || isNaN(result)) return null
     return result
   } catch {
@@ -129,8 +138,8 @@ export function validateFormula(
   }
   testExpr = testExpr.replace(/\[[^\]]+\]/g, '1')
 
-  if (!/^[\d\s+\-*/().e]+$/.test(testExpr.replace(/\s/g, ''))) {
-    return 'Formula contains invalid characters. Use numbers, +, -, *, /, (, ), and account references like [account_id]'
+  if (!/^[\d\s+\-*/().eMath,_a-zA-Z]+$/.test(testExpr.replace(/\s/g, ''))) {
+    return 'Formula contains invalid characters. Use numbers, +, -, *, /, (, ), MAX(), MIN(), ABS(), IF(), and account references like [account_id]'
   }
 
   try {

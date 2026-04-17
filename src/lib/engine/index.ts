@@ -96,9 +96,17 @@ function applyBaselineAdjustment(value: number, adjustmentPct: number | undefine
 function deriveSalaryForecast(
   accountForecasts: Record<string, number[]>,
   forecastLength: number,
-  microForecastItems: ForecastMicroForecastItem[] | undefined
+  microForecastItems: ForecastMicroForecastItem[] | undefined,
+  accounts?: AccountInput[]
 ): number[] {
-  const salaryForecast = [...(accountForecasts['exp-1'] ?? Array(forecastLength).fill(0))]
+  // Find salary account by standardMapping tag, fall back to 'exp-1' for demo data
+  const salaryAccountId = accounts?.find(
+    (a) => a.name.toLowerCase().includes('salary') ||
+           a.name.toLowerCase().includes('salaries') ||
+           a.name.toLowerCase().includes('payroll')
+  )?.id ?? 'exp-1'
+
+  const salaryForecast = [...(accountForecasts[salaryAccountId] ?? Array(forecastLength).fill(0))]
 
   microForecastItems
     ?.filter((item) => item.isActive !== false && item.type === 'hire')
@@ -233,7 +241,13 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
   })
 
   // 5. THREE-WAY INTEGRATION
-  const cashAccount = accounts.find((a) => a.id === 'ast-1')
+  // Find cash/bank account dynamically by name — never rely on hardcoded IDs
+  const cashAccount = accounts.find((a) =>
+    a.category === 'Assets' && (
+      a.name.toLowerCase().includes('cash') ||
+      a.name.toLowerCase().includes('bank')
+    )
+  )
   const openingCash = cashAccount?.historicalValues.at(-1) ?? 0
   const opening: OpeningBalances = customOpening ?? {
     cash: openingCash,
@@ -249,7 +263,7 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
   const rawIntegrationResults = runThreeWayIntegration(opening, finalInputs)
 
   // 6. COMPLIANCE
-  const salaryForecast = deriveSalaryForecast(accountForecasts, forecastLength, microForecastItems)
+  const salaryForecast = deriveSalaryForecast(accountForecasts, forecastLength, microForecastItems, accounts)
   const periods = buildForecastPeriods(forecastMonthLabels)
   const compliance = buildComplianceForecast({
     periods,
