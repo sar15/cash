@@ -1,7 +1,7 @@
 import { levenshtein } from './account-mapper'
 import { STANDARD_INDIAN_COA, type StandardIndianAccount } from '@/lib/standards/indian-coa'
 
-export type ServerAccountMatchType = 'exact' | 'alias' | 'keyword' | 'fuzzy' | 'unmapped'
+export type ServerAccountMatchType = 'exact' | 'alias' | 'keyword' | 'fuzzy' | 'unmapped' | 'saved' | 'skipped'
 
 export interface ServerAccountMappingResult {
   account: StandardIndianAccount | null

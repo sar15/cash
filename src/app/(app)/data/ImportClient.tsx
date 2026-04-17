@@ -8,10 +8,12 @@ import { useCompanyContext } from '@/hooks/use-company-context'
 import { useAccountsStore } from '@/stores/accounts-store'
 import { useActualsStore } from '@/stores/actuals-store'
 import { useCompanyStore } from '@/stores/company-store'
+import { useImportMappingStore } from '@/stores/import-mapping-store'
 import { apiPost } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 import { formatAuto } from '@/lib/utils/indian-format'
 import { HeaderBadge, PageHeader, SurfaceCard } from '@/components/shared/page-header'
+import { AccountMappingReview } from '@/components/import/AccountMappingReview'
 
 type Step = 1 | 2 | 3 | 4
 
@@ -27,7 +29,7 @@ interface PreviewRow {
   accountName: string
   mappedAccountId: string | null
   mappedAccountName: string | null
-  matchType: 'exact' | 'fuzzy' | 'keyword' | 'unmapped'
+  matchType: 'exact' | 'fuzzy' | 'keyword' | 'unmapped' | 'alias' | 'saved' | 'skipped'
   confidence: number
   category: string | null
   accountType: ParsedAccountType | null
@@ -154,6 +156,7 @@ export default function ImportClient() {
   const updateCompany = useCompanyStore((state) => state.updateCompany)
   const loadAccounts = useAccountsStore((state) => state.load)
   const loadActuals = useActualsStore((state) => state.load)
+  const resetMappingStore = useImportMappingStore((state) => state.reset)
 
   const [step, setStep] = useState<Step>(1)
   const [isUploading, setIsUploading] = useState(false)
@@ -338,64 +341,16 @@ export default function ImportClient() {
               </div>
             ) : null}
 
-            <div className="overflow-x-auto rounded-md border border-[#E5E7EB]">
-              <table className="fin-table w-full min-w-[800px]">
-                <thead>
-                  <tr>
-                    <th className="text-left">Source row</th>
-                    <th className="text-left">Mapped account</th>
-                    <th className="text-left">Type</th>
-                    <th className="text-left">Match</th>
-                    <th>Latest value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editedRows.map((row, index) => (
-                    <tr key={`${row.rowIndex}-${row.accountName}`} className="hover-row">
-                      <td className="!font-sans">
-                        <div className="text-sm font-medium text-[#0F172A]">{row.accountName}</div>
-                        <div className="text-xs text-[#94A3B8]">Row {row.rowIndex}</div>
-                      </td>
-                      <td>
-                        <input value={row.mappedAccountName ?? ''} onChange={(e) => handleRowChange(index, { mappedAccountName: e.target.value })}
-                          className="w-full rounded border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-sm text-[#0F172A] outline-none focus:border-[#2563EB]" />
-                      </td>
-                      <td>
-                        <select value={guessAccountType(row)} onChange={(e) => handleRowChange(index, { accountType: e.target.value as ParsedAccountType })}
-                          className="rounded border border-[#E5E7EB] bg-white px-2 py-1.5 text-sm text-[#0F172A] outline-none focus:border-[#2563EB]">
-                          <option value="revenue">Revenue</option>
-                          <option value="expense">Expense</option>
-                          <option value="asset">Asset</option>
-                          <option value="liability">Liability</option>
-                          <option value="equity">Equity</option>
-                        </select>
-                      </td>
-                      <td className="!font-sans">
-                        <span className={cn(
-                          'inline-flex rounded border px-2 py-0.5 text-[11px] font-medium',
-                          row.confidence >= 0.8 && 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]',
-                          row.confidence >= 0.5 && row.confidence < 0.8 && 'border-[#FDE68A] bg-[#FFFBEB] text-[#D97706]',
-                          row.confidence < 0.5 && 'border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]'
-                        )}>
-                          {Math.round(row.confidence * 100)}% {row.matchType}
-                        </span>
-                      </td>
-                      <td className="font-semibold">{formatAuto(row.values[row.values.length - 1]?.amountPaise ?? 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-[#64748B]">
-                Balance checks passed for {validationSummary.validCount} of {parseResult.validation.length} periods.
-              </div>
-              <button onClick={() => setStep(4)}
-                className="btn-press inline-flex items-center gap-1.5 rounded bg-[#0F172A] px-3 py-1.5 text-sm font-medium text-white transition-colors duration-[80ms] hover:bg-[#1E293B]">
-                Review and publish <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            {/* Human-in-the-loop mapping review */}
+            <AccountMappingReview
+              rows={rows}
+              companyId={companyId ?? ''}
+              onSaveAndImport={async () => {
+                // Mappings already saved by AccountMappingReview — proceed to publish step
+                setStep(4)
+              }}
+              onCancel={() => { resetMappingStore(); setStep(2) }}
+            />
           </div>
         ) : null}
 

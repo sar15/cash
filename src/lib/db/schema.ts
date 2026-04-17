@@ -548,6 +548,28 @@ export const idempotencyKeys = sqliteTable(
   ]
 )
 
+// ============================================================
+// ACCOUNT MAPPINGS — persisted user corrections for ledger name → COA mapping
+// ============================================================
+export const accountMappings = sqliteTable(
+  'account_mappings',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    rawLedgerName: text('raw_ledger_name').notNull(),
+    standardAccountId: text('standard_account_id'), // null when skipped=true
+    skipped: integer('skipped', { mode: 'boolean' }).notNull().default(false),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    uniqueIndex('idx_account_mappings_unique').on(table.companyId, table.rawLedgerName),
+    index('idx_account_mappings_company').on(table.companyId),
+  ]
+)
+
 export const companiesRelations = relations(companies, ({ many, one }) => ({
   accounts: many(accounts),
   monthlyActuals: many(monthlyActuals),
@@ -561,6 +583,7 @@ export const companiesRelations = relations(companies, ({ many, one }) => ({
   members: many(companyMembers),
   compliancePayments: many(compliancePayments),
   taxRateHistory: many(taxRateHistory),
+  accountMappings: many(accountMappings),
   complianceConfig: one(complianceConfig, {
     fields: [companies.id],
     references: [complianceConfig.companyId],
@@ -734,6 +757,13 @@ export const idempotencyKeysRelations = relations(idempotencyKeys, ({ one }) => 
 export const taxRateHistoryRelations = relations(taxRateHistory, ({ one }) => ({
   company: one(companies, {
     fields: [taxRateHistory.companyId],
+    references: [companies.id],
+  }),
+}))
+
+export const accountMappingsRelations = relations(accountMappings, ({ one }) => ({
+  company: one(companies, {
+    fields: [accountMappings.companyId],
     references: [companies.id],
   }),
 }))

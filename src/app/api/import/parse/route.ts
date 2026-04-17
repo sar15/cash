@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const file = await getFile(body.fileKey)
-    const preview = await buildImportPreview(toArrayBuffer(file), body.sheetName)
+    const preview = await buildImportPreview(toArrayBuffer(file), body.sheetName, company.id)
 
     return jsonResponse({
       companyId: company.id,

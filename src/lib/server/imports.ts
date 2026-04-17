@@ -3,6 +3,7 @@ import { isTallyXml, parseTallyXml } from '@/lib/import/tally-parser'
 import {
   mapServerAccountDetailed,
   type ServerAccountMatchType,
+  type ServerAccountMappingResult,
 } from '@/lib/import/server-account-mapper'
 import {
   detectStructure,
@@ -15,6 +16,7 @@ import {
   type StandardAccountType,
   type StandardStatementCategory,
 } from '@/lib/standards/indian-coa'
+import { getMappingsForCompany } from '@/lib/db/queries/account-mappings'
 
 import { RouteError } from './api'
 
@@ -134,7 +136,7 @@ function buildWarnings(rows: PreviewRow[], structure: ColumnMap) {
   return warnings
 }
 
-export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName?: string) {
+export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName?: string, companyId?: string) {
   // Auto-detect Tally XML — route to dedicated parser before trying Excel/CSV
   const sheets = isTallyXml(buffer)
     ? await parseTallyXml(buffer)
@@ -153,6 +155,10 @@ export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName
     throw new RouteError(422, 'Unable to detect account and month columns in the uploaded file.')
   }
 
+  const savedMappings = companyId
+    ? await getMappingsForCompany(companyId)
+    : new Map<string, { standardAccountId: string | null; skipped: boolean }>()
+
   const rows = selectedSheet.data
     .slice(Math.max(structure.headerRowIndex + 1, 0))
     .map<PreviewRow | null>((row, rowOffset) => {
@@ -161,7 +167,22 @@ export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName
         return null
       }
 
-      const mapping = mapServerAccountDetailed(accountName)
+      const saved = savedMappings.get(accountName)
+      let mapping: ServerAccountMappingResult
+      if (saved) {
+        if (saved.skipped) {
+          const values = structure.dataColIndices.map((columnIndex, monthIndex) => ({
+            period: structure.months[monthIndex],
+            amountPaise: toPaise(parseIndianNumberString(row[columnIndex] as string | number)),
+          }))
+          return { rowIndex: structure.headerRowIndex + 1 + rowOffset, accountName, mappedAccountId: null, mappedAccountName: null, matchType: 'skipped' as const, confidence: 1, category: null, accountType: null, values }
+        }
+        const account = STANDARD_INDIAN_COA.find(a => a.id === saved.standardAccountId) ?? null
+        mapping = { account, matchType: 'saved' as const, confidence: 1.0 }
+      } else {
+        mapping = mapServerAccountDetailed(accountName)
+      }
+
       const values = structure.dataColIndices.map((columnIndex, monthIndex) => ({
         period: structure.months[monthIndex],
         amountPaise: toPaise(parseIndianNumberString(row[columnIndex] as string | number)),
@@ -180,7 +201,7 @@ export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName
       }
     })
     .filter((row): row is PreviewRow => row !== null)
-    .filter((row) => row.values.some((value) => value.amountPaise !== 0) || row.mappedAccountId !== null)
+    .filter((row) => row.matchType !== 'skipped' && (row.values.some((value) => value.amountPaise !== 0) || row.mappedAccountId !== null))
 
   return {
     sheets: sheets.map((sheet) => ({
