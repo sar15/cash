@@ -11,7 +11,6 @@ import { useCompanyStore } from '@/stores/company-store'
 import { useImportMappingStore } from '@/stores/import-mapping-store'
 import { apiPost } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
-import { formatAuto } from '@/lib/utils/indian-format'
 import { HeaderBadge, PageHeader, SurfaceCard } from '@/components/shared/page-header'
 import { AccountMappingReview } from '@/components/import/AccountMappingReview'
 
@@ -198,22 +197,13 @@ export default function ImportClient() {
   }, [companyId])
 
   const rows = useMemo(() => parseResult?.rows ?? [], [parseResult])
+
+  const [editedRows, setEditedRows] = useState<PreviewRow[]>([])
   const mappedRows = useMemo(() =>
     rows.map((row) => ({ ...row, mappedAccountName: row.mappedAccountName ?? row.accountName, accountType: guessAccountType(row) })),
     [rows]
   )
-
-  const [editedRows, setEditedRows] = useState<PreviewRow[]>([])
   useEffect(() => { setEditedRows(mappedRows) }, [mappedRows])
-
-  const validationSummary = useMemo(() => {
-    const items = parseResult?.validation ?? []
-    return { validCount: items.filter((i) => i.isValid).length, invalidCount: items.filter((i) => !i.isValid).length }
-  }, [parseResult])
-
-  const handleRowChange = useCallback((index: number, updates: Partial<PreviewRow>) => {
-    setEditedRows((current) => current.map((row, i) => (i === index ? { ...row, ...updates } : row)))
-  }, [])
 
   const handleSave = useCallback(async () => {
     if (!companyId || editedRows.length === 0) return; setIsSaving(true); setError(null)
