@@ -17,10 +17,6 @@ import {
 } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
-
 async function getOwnedForecastRecord(userId: string, forecastId: string) {
   const forecast = await db.query.microForecasts.findFirst({
     columns: { id: true, companyId: true },
@@ -37,7 +33,7 @@ async function getOwnedForecastRecord(userId: string, forecastId: string) {
   return { company, forecast: fullForecast }
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
@@ -56,7 +52,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
@@ -108,7 +104,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params

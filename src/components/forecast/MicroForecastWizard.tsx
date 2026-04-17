@@ -34,7 +34,7 @@ const wizardTypes: {
   { id: 'hire',         label: 'New Hire',        desc: 'Salary, PF, ESI for a new employee',    icon: UserPlus,     iconColor: 'text-[#2563EB]', iconBg: 'bg-[#EFF6FF]' },
   { id: 'revenue',      label: 'New Revenue',      desc: 'New client or recurring revenue stream', icon: TrendingUp,   iconColor: 'text-[#059669]', iconBg: 'bg-[#ECFDF5]' },
   { id: 'asset',        label: 'Asset Purchase',   desc: 'CapEx with depreciation schedule',       icon: Package,      iconColor: 'text-[#D97706]', iconBg: 'bg-[#FFFBEB]' },
-  { id: 'loan',         label: 'Loan / Financing', desc: 'Debt with EMI repayment schedule',       icon: Landmark,     iconColor: 'text-[#7C3AED]', iconBg: 'bg-[#F5F3FF]' },
+  { id: 'loan',         label: 'Loan / Financing', desc: 'Debt with EMI repayment schedule',       icon: Landmark,     iconColor: 'text-[#0D9488]', iconBg: 'bg-[#F0FDFA]' },
   { id: 'expense',      label: 'One-Time Expense', desc: 'Marketing, office move, any one-off',    icon: Receipt,      iconColor: 'text-[#DC2626]', iconBg: 'bg-[#FEF2F2]' },
   { id: 'price_change', label: 'Price Change',     desc: 'Revenue up/down % from a start month',  icon: TrendingDown, iconColor: 'text-[#0891B2]', iconBg: 'bg-[#ECFEFF]' },
 ]
@@ -59,13 +59,13 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-function ImpactBadge({ children, tone }: { children: React.ReactNode; tone: 'green' | 'amber' | 'red' | 'blue' | 'purple' }) {
+function ImpactBadge({ children, tone }: { children: React.ReactNode; tone: 'green' | 'amber' | 'red' | 'blue' | 'teal' }) {
   const styles = {
     green:  'border-[#A7F3D0] bg-[#ECFDF5] text-[#065F46]',
     amber:  'border-[#FDE68A] bg-[#FFFBEB] text-[#92400E]',
     red:    'border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]',
     blue:   'border-[#BFDBFE] bg-[#EFF6FF] text-[#1E3A5F]',
-    purple: 'border-[#DDD6FE] bg-[#F5F3FF] text-[#4C1D95]',
+    teal: 'border-[#CCFBF1] bg-[#F0FDFA] text-[#0F766E]',
   }
   return (
     <div className={cn('rounded-lg border px-3 py-2 text-xs', styles[tone])}>
@@ -215,7 +215,7 @@ function LoanForm({ onSubmit, isSubmitting }: { onSubmit: (d: LoanWizardInputs) 
         <input type="month" value={startMonth} onChange={e => setStartMonth(e.target.value)} className={inputCls} />
       </Field>
       {emi > 0 && (
-        <ImpactBadge tone="purple">
+        <ImpactBadge tone="teal">
           Approx. EMI: <strong>{formatAuto(emi)}/month</strong> · Total repayment: {formatAuto(emi * tenureMonths)}
         </ImpactBadge>
       )}

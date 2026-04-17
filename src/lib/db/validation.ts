@@ -1,4 +1,4 @@
-import { z } from 'zod/v4'
+import { z } from 'zod'
 
 // ============================================================
 // COMPANY SCHEMAS
@@ -187,4 +187,13 @@ export const importSaveSchema = z.object({
     period: z.string().regex(/^\d{4}-\d{2}-01$/),
     amount: z.number().int(),
   })).min(1),
+})
+
+// ============================================================
+// USER PROFILE SCHEMAS
+// ============================================================
+export const userTypeEnum = z.enum(['business_owner', 'ca_firm'])
+
+export const updateUserProfileSchema = z.object({
+  userType: userTypeEnum,
 })

@@ -103,27 +103,47 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   },
 
   update: async (companyId, accountId, data) => {
-    const response = await apiPatch<Account | AccountResponse>(
-      `/api/coa/${companyId}/${accountId}`,
-      data
-    )
-    const updated = 'account' in (response as AccountResponse)
-      ? (response as AccountResponse).account
-      : (response as Account)
-
-    if (!updated) {
-      throw new Error('Account update returned no account payload')
-    }
-
+    // Optimistic update — apply immediately, roll back on failure
+    const previous = get().accounts
     set((s) => ({
-      accounts: s.accounts.map((a) => (a.id === accountId ? { ...a, ...updated } : a)),
+      accounts: s.accounts.map((a) => (a.id === accountId ? { ...a, ...data } : a)),
     }))
+
+    try {
+      const response = await apiPatch<Account | AccountResponse>(
+        `/api/coa/${companyId}/${accountId}`,
+        data
+      )
+      const updated = 'account' in (response as AccountResponse)
+        ? (response as AccountResponse).account
+        : (response as Account)
+
+      if (!updated) {
+        throw new Error('Account update returned no account payload')
+      }
+
+      set((s) => ({
+        accounts: s.accounts.map((a) => (a.id === accountId ? { ...a, ...updated } : a)),
+      }))
+    } catch (err) {
+      // Roll back to previous state
+      set({ accounts: previous })
+      throw err
+    }
   },
 
   remove: async (companyId, accountId) => {
-    await apiDelete(`/api/coa/${companyId}/${accountId}`)
+    // Optimistic remove — apply immediately, roll back on failure
+    const previous = get().accounts
     set((s) => ({
       accounts: s.accounts.filter((a) => a.id !== accountId),
     }))
+
+    try {
+      await apiDelete(`/api/coa/${companyId}/${accountId}`)
+    } catch (err) {
+      set({ accounts: previous })
+      throw err
+    }
   },
 }))

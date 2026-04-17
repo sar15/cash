@@ -25,11 +25,81 @@ export const companies = sqliteTable(
     currency: text('currency').default('INR'),
     numberFormat: text('number_format').default('lakhs'),
     logoUrl: text('logo_url'),
+    isPrimary: integer('is_primary', { mode: 'boolean' }).default(false),
     lockedPeriods: text('locked_periods').default('[]'), // JSON array of YYYY-MM-01 strings
     createdAt: text('created_at').default(sql`(datetime('now'))`),
     updatedAt: text('updated_at').default(sql`(datetime('now'))`),
   },
-  (table) => [index('idx_companies_user').on(table.clerkUserId)]
+  (table) => [
+    index('idx_companies_user').on(table.clerkUserId),
+  ]
+)
+
+// ============================================================
+// USER PROFILES — per-user settings & persona mode
+// ============================================================
+export const userProfiles = sqliteTable(
+  'user_profiles',
+  {
+    clerkUserId: text('clerk_user_id').primaryKey().notNull(),
+    userType: text('user_type').notNull().default('business_owner'), // 'business_owner' | 'ca_firm'
+    onboardingCompleted: integer('onboarding_completed', { mode: 'boolean' }).default(false),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [index('idx_user_profiles_type').on(table.userType)]
+)
+
+// ============================================================
+// FIRMS — CA/firm multi-client workspace
+// ============================================================
+export const firms = sqliteTable(
+  'firms',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    ownerClerkUserId: text('owner_clerk_user_id').notNull(),
+    name: text('name').notNull(),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index('idx_firms_owner').on(table.ownerClerkUserId),
+  ]
+)
+
+export const firmMembers = sqliteTable(
+  'firm_members',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    firmId: text('firm_id')
+      .notNull()
+      .references(() => firms.id, { onDelete: 'cascade' }),
+    clerkUserId: text('clerk_user_id').notNull(),
+    role: text('role').notNull().default('staff'), // 'partner' | 'admin' | 'staff' | 'readonly'
+    acceptedAt: text('accepted_at'),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    uniqueIndex('idx_firm_members_unique').on(table.firmId, table.clerkUserId),
+    index('idx_firm_members_user').on(table.clerkUserId),
+  ]
+)
+
+export const firmClients = sqliteTable(
+  'firm_clients',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    firmId: text('firm_id')
+      .notNull()
+      .references(() => firms.id, { onDelete: 'cascade' }),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    uniqueIndex('idx_firm_clients_unique').on(table.firmId, table.companyId),
+    index('idx_firm_clients_company').on(table.companyId),
+  ]
 )
 
 // ============================================================
@@ -426,6 +496,29 @@ export const reminderConfig = sqliteTable('reminder_config', {
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 })
 
+// ============================================================
+// IDEMPOTENCY KEYS — safe retries for mutation endpoints
+// ============================================================
+export const idempotencyKeys = sqliteTable(
+  'idempotency_keys',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    route: text('route').notNull(),
+    method: text('method').notNull(),
+    responseStatus: integer('response_status').notNull(),
+    responseBody: text('response_body').notNull().default('{}'),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    uniqueIndex('idx_idempotency_unique').on(table.companyId, table.key, table.route, table.method),
+    index('idx_idempotency_created').on(table.createdAt),
+  ]
+)
+
 export const companiesRelations = relations(companies, ({ many, one }) => ({
   accounts: many(accounts),
   monthlyActuals: many(monthlyActuals),
@@ -450,6 +543,11 @@ export const companiesRelations = relations(companies, ({ many, one }) => ({
     fields: [companies.id],
     references: [reminderConfig.companyId],
   }),
+}))
+
+export const userProfilesRelations = relations(userProfiles, ({ many }) => ({
+  // Intentionally no FK relationships; Clerk is the source of truth for users.
+  companies: many(companies),
 }))
 
 export const accountsRelations = relations(accounts, ({ many, one }) => ({
@@ -592,6 +690,13 @@ export const reminderConfigRelations = relations(reminderConfig, ({ one }) => ({
 export const compliancePaymentsRelations = relations(compliancePayments, ({ one }) => ({
   company: one(companies, {
     fields: [compliancePayments.companyId],
+    references: [companies.id],
+  }),
+}))
+
+export const idempotencyKeysRelations = relations(idempotencyKeys, ({ one }) => ({
+  company: one(companies, {
+    fields: [idempotencyKeys.companyId],
     references: [companies.id],
   }),
 }))

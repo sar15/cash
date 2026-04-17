@@ -1,9 +1,9 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { type NextRequest } from 'next/server'
 import { z } from 'zod'
 
 import { db, schema } from '@/lib/db'
-import { deleteFile } from '@/lib/r2'
+import { deleteFile } from '@/lib/storage'
 import { inngest } from '@/lib/inngest/client'
 import { writeAuditLog } from '@/lib/db/queries/audit-log'
 import { createNotification } from '@/lib/db/queries/notifications'
@@ -88,54 +88,66 @@ export async function POST(request: NextRequest) {
         existingAccounts.map((account) => [normalizeKey(account.name), account.id])
       )
 
-      let createdAccounts = 0
-      let updatedAccounts = 0
+      // ── Batch accounts: split into new vs existing ──────────────────────
+      const toInsert: typeof body.accounts = []
+      const toUpdate: Array<{ id: string; account: typeof body.accounts[number] }> = []
 
       for (const account of body.accounts) {
         const key = normalizeKey(account.name)
-        const existingAccountId = accountIdByName.get(key)
-
-        if (existingAccountId) {
-          await tx
-            .update(schema.accounts)
-            .set({
-              code: account.code,
-              name: account.name,
-              accountType: account.accountType,
-              standardMapping: account.standardMapping,
-              parentId: account.parentId,
-              level: account.level,
-              isGroup: account.isGroup,
-              sortOrder: account.sortOrder,
-            })
-            .where(
-              and(
-                eq(schema.accounts.id, existingAccountId),
-                eq(schema.accounts.companyId, company.id)
-              )
-            )
-
-          updatedAccounts += 1
-          continue
+        const existingId = accountIdByName.get(key)
+        if (existingId) {
+          toUpdate.push({ id: existingId, account })
+        } else {
+          toInsert.push(account)
         }
+      }
 
-        const [inserted] = await tx
+      // Batch insert new accounts (single query)
+      if (toInsert.length > 0) {
+        const inserted = await tx
           .insert(schema.accounts)
-          .values({
+          .values(toInsert.map((a) => ({
             companyId: company.id,
-            code: account.code,
-            name: account.name,
-            accountType: account.accountType,
-            standardMapping: account.standardMapping,
-            parentId: account.parentId,
-            level: account.level,
-            isGroup: account.isGroup,
-            sortOrder: account.sortOrder,
-          })
+            code: a.code,
+            name: a.name,
+            accountType: a.accountType,
+            standardMapping: a.standardMapping,
+            parentId: a.parentId,
+            level: a.level,
+            isGroup: a.isGroup,
+            sortOrder: a.sortOrder,
+          })))
           .returning()
+        for (const row of inserted) {
+          accountIdByName.set(normalizeKey(row.name), row.id)
+        }
+      }
 
-        accountIdByName.set(key, inserted.id)
-        createdAccounts += 1
+      // Update existing accounts in parallel (bounded concurrency)
+      const CHUNK = 20
+      for (let i = 0; i < toUpdate.length; i += CHUNK) {
+        await Promise.all(
+          toUpdate.slice(i, i + CHUNK).map(({ id, account }) =>
+            tx
+              .update(schema.accounts)
+              .set({
+                code: account.code,
+                name: account.name,
+                accountType: account.accountType,
+                standardMapping: account.standardMapping,
+                parentId: account.parentId,
+                level: account.level,
+                isGroup: account.isGroup,
+                sortOrder: account.sortOrder,
+              })
+              .where(
+                and(
+                  eq(schema.accounts.id, id),
+                  eq(schema.accounts.companyId, company.id)
+                )
+              )
+          )
+        )
       }
 
       if (body.replaceExisting) {
@@ -144,36 +156,43 @@ export async function POST(request: NextRequest) {
           .where(eq(schema.monthlyActuals.companyId, company.id))
       }
 
+      // ── Batch insert actuals (chunked to avoid SQLite param limits) ──────
+      const ACTUALS_CHUNK = 100
       let savedActuals = 0
-      for (const actual of body.actuals) {
-        const accountId = accountIdByName.get(normalizeKey(actual.accountName))
-        if (!accountId) {
-          throw new RouteError(422, `Unknown account for actual: ${actual.accountName}`)
-        }
 
-        await tx
-          .insert(schema.monthlyActuals)
-          .values({
+      for (let i = 0; i < body.actuals.length; i += ACTUALS_CHUNK) {
+        const chunk = body.actuals.slice(i, i + ACTUALS_CHUNK)
+        const values = chunk.map((actual) => {
+          const accountId = accountIdByName.get(normalizeKey(actual.accountName))
+          if (!accountId) {
+            throw new RouteError(422, `Unknown account for actual: ${actual.accountName}`)
+          }
+          return {
             companyId: company.id,
             accountId,
             period: normalizePeriod(actual.period),
             amount: actual.amount,
-          })
+          }
+        })
+
+        await tx
+          .insert(schema.monthlyActuals)
+          .values(values)
           .onConflictDoUpdate({
             target: [
               schema.monthlyActuals.companyId,
               schema.monthlyActuals.accountId,
               schema.monthlyActuals.period,
             ],
-            set: { amount: actual.amount },
+            set: { amount: sql`excluded.amount` },
           })
 
-        savedActuals += 1
+        savedActuals += chunk.length
       }
 
       return {
-        createdAccounts,
-        updatedAccounts,
+        createdAccounts: toInsert.length,
+        updatedAccounts: toUpdate.length,
         savedActuals,
       }
     })

@@ -5,13 +5,9 @@ import { createAccountSchema } from '@/lib/db/validation'
 import { handleRouteError, jsonResponse, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
-interface RouteContext {
-  params: Promise<{ companyId: string }>
-}
-
 const createAccountForCompanySchema = createAccountSchema.omit({ companyId: true })
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId } = await context.params
@@ -31,7 +27,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId } = await context.params

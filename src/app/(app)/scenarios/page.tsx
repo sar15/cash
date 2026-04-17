@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, SlidersHorizontal } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -77,24 +77,46 @@ function OverrideEditor({ scenario, onSave }: { scenario: Scenario; onSave: (sce
   }
 
   const renderGroup = (title: string, rows: typeof accounts) => (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-[#0F172A]">{title}</span>
-        <span className="label-xs">{rows.length} drivers</span>
+    <div className="space-y-1">
+      <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2 mb-3">
+        <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#64748B]">{title}</span>
+        <span className="text-xs text-[#94A3B8]">{rows.length} accounts</span>
       </div>
       {rows.map((account) => {
         const value = adjustments[account.id] ?? 0
         return (
-          <div key={account.id} className="rounded border border-[#E5E7EB] bg-[#F8FAFC] px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-sm text-[#334155]">{account.name}</span>
-              <span className={cn('font-num text-sm font-semibold', value > 0 && 'text-[#059669]', value < 0 && 'text-[#DC2626]', value === 0 && 'text-[#94A3B8]')}>
-                {value > 0 ? '+' : ''}{value}%
-              </span>
+          <div key={account.id} className="flex items-center gap-3 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 hover:border-[#CBD5E1] transition-colors">
+            <span className="flex-1 truncate text-sm text-[#334155]">{account.name}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setAdjustments(c => ({ ...c, [account.id]: Math.max(-100, (c[account.id] ?? 0) - 5) }))}
+                className="flex h-6 w-6 items-center justify-center rounded border border-[#E2E8F0] text-[#64748B] hover:border-[#CBD5E1] hover:text-[#0F172A] transition-colors text-xs font-bold"
+              >−</button>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={-100}
+                  max={200}
+                  step={1}
+                  value={value}
+                  onChange={(e) => setAdjustments(c => ({ ...c, [account.id]: Number(e.target.value) }))}
+                  className="w-16 rounded border border-[#E2E8F0] bg-white px-2 py-1 text-center text-sm font-semibold text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/10"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#94A3B8] pointer-events-none">%</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdjustments(c => ({ ...c, [account.id]: Math.min(200, (c[account.id] ?? 0) + 5) }))}
+                className="flex h-6 w-6 items-center justify-center rounded border border-[#E2E8F0] text-[#64748B] hover:border-[#CBD5E1] hover:text-[#0F172A] transition-colors text-xs font-bold"
+              >+</button>
             </div>
-            <input type="range" min={-50} max={50} step={5} value={value}
-              onChange={(e) => setAdjustments((c) => ({ ...c, [account.id]: Number(e.target.value) }))}
-              className="mt-2 w-full accent-[#059669]" />
+            <span className={cn(
+              'w-12 text-right text-xs font-semibold tabular-nums',
+              value > 0 ? 'text-[#059669]' : value < 0 ? 'text-[#DC2626]' : 'text-[#94A3B8]'
+            )}>
+              {value > 0 ? '+' : ''}{value}%
+            </span>
           </div>
         )
       })}
@@ -102,18 +124,18 @@ function OverrideEditor({ scenario, onSave }: { scenario: Scenario; onSave: (sce
   )
 
   return (
-    <SurfaceCard className="space-y-4">
-      <div className="flex items-center justify-between">
+    <SurfaceCard>
+      <div className="mb-5 flex items-center justify-between">
         <div>
-          <p className="text-sm font-semibold text-[#0F172A]">Scenario editor — {scenario.name}</p>
-          <p className="text-xs text-[#94A3B8]">Adjust account-level growth percentages</p>
+          <p className="text-sm font-semibold text-[#0F172A]">Edit — {scenario.name}</p>
+          <p className="text-xs text-[#94A3B8]">Set % adjustment per account. Positive = growth, negative = decline.</p>
         </div>
         <button onClick={save}
-          className="btn-press inline-flex items-center gap-1.5 rounded bg-[#0F172A] px-3 py-1.5 text-sm font-medium text-white transition-colors duration-[80ms] hover:bg-[#1E293B]">
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Save
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1E293B]">
+          Save adjustments
         </button>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         {renderGroup('Revenue', revenueAccounts)}
         {renderGroup('Expenses', expenseAccounts)}
       </div>
@@ -218,53 +240,112 @@ function ScenarioCompareChart({ scenarios, months }: { scenarios: Scenario[]; mo
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <SurfaceCard className="border-[#A7F3D0]">
-          <p className="label-xs text-[#059669]">Best case — {best.name}</p>
-          <p className="mt-2 font-num text-xl font-bold text-[#059669]">{formatAuto(best.value)}</p>
-          <p className="mt-1 text-xs text-[#94A3B8]">{chartMetric === 'cash' ? 'Closing cash' : 'Net income'} · end of forecast</p>
-        </SurfaceCard>
-        <SurfaceCard className="border-[#FECACA]">
-          <p className="label-xs text-[#DC2626]">Worst case — {worst.name}</p>
-          <p className="mt-2 font-num text-xl font-bold text-[#DC2626]">{formatAuto(worst.value)}</p>
-          <p className="mt-1 text-xs text-[#94A3B8]">{chartMetric === 'cash' ? 'Closing cash' : 'Net income'} · end of forecast</p>
-        </SurfaceCard>
+      {/* Best/Worst summary row */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">Best Case</p>
+          <p className="mt-1.5 text-lg font-bold text-[#059669] tabular-nums">{formatAuto(best.value)}</p>
+          <p className="mt-0.5 text-xs text-[#64748B]">{best.name}</p>
+        </div>
+        <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">Worst Case</p>
+          <p className="mt-1.5 text-lg font-bold text-[#DC2626] tabular-nums">{formatAuto(worst.value)}</p>
+          <p className="mt-0.5 text-xs text-[#64748B]">{worst.name}</p>
+        </div>
+        <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">Scenarios</p>
+          <p className="mt-1.5 text-lg font-bold text-[#0F172A] tabular-nums">{seriesNames.length}</p>
+          <p className="mt-0.5 text-xs text-[#64748B]">incl. baseline</p>
+        </div>
+        <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">Spread</p>
+          <p className="mt-1.5 text-lg font-bold text-[#2563EB] tabular-nums">{formatAuto(Math.abs(best.value - worst.value))}</p>
+          <p className="mt-0.5 text-xs text-[#64748B]">best vs worst</p>
+        </div>
       </div>
 
+      {/* Chart */}
       <SurfaceCard>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-[#0F172A]">Scenario comparison</p>
-            <p className="text-xs text-[#94A3B8]">Full three-way engine run per scenario — not an approximation</p>
+            <p className="text-xs text-[#94A3B8]">Full three-way engine run per scenario</p>
           </div>
-          <div className="inline-flex rounded border border-[#E5E7EB] bg-[#F8FAFC] p-0.5">
+          <div className="flex rounded-lg border border-[#E2E8F0] overflow-hidden">
             {(['cash', 'netIncome'] as const).map((m) => (
               <button key={m} onClick={() => setChartMetric(m)}
-                className={cn('rounded px-2.5 py-1 text-xs font-medium transition-colors duration-[80ms]',
-                  chartMetric === m ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#94A3B8] hover:text-[#475569]')}>
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  chartMetric === m
+                    ? 'bg-[#0F172A] text-white'
+                    : 'bg-white text-[#64748B] hover:text-[#0F172A]'
+                )}>
                 {m === 'cash' ? 'Cash Position' : 'Net Income'}
               </button>
             ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-            <XAxis dataKey="month" tick={{ fill: '#94A3B8', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#94A3B8', fontSize: 11 }} axisLine={false} tickLine={false}
-              tickFormatter={(v: number) => formatValue(v)} />
-            <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '6px', color: '#0F172A', fontSize: '12px' }}
-              formatter={(value: unknown) => typeof value === 'number' ? [formatValue(value), ''] : [String(value ?? ''), '']} />
-            <Legend wrapperStyle={{ fontSize: '12px' }} />
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={data} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="2 4" stroke="#F1F5F9" vertical={false} />
+            <XAxis dataKey="month" tick={{ fill: '#94A3B8', fontSize: 11, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#94A3B8', fontSize: 11, fontFamily: 'Inter' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatValue(v)} width={72} />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.07)', fontSize: '12px', fontFamily: 'Inter' }}
+              formatter={(value: unknown, name: unknown) => typeof value === 'number' ? [formatValue(value), String(name)] : [String(value ?? ''), String(name)]}
+            />
+            <Legend wrapperStyle={{ fontSize: '12px', fontFamily: 'Inter', paddingTop: '12px' }} />
             {seriesNames.map((name, i) => (
               <Line key={name} type="monotone" dataKey={name}
                 stroke={colors[i % colors.length]}
-                strokeWidth={name === 'Baseline' ? 2 : 1.5}
+                strokeWidth={name === 'Baseline' ? 2.5 : 1.5}
                 dot={false}
-                strokeDasharray={name === 'Baseline' ? undefined : '4 2'} />
+                strokeDasharray={name === 'Baseline' ? undefined : '5 3'}
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>
+      </SurfaceCard>
+
+      {/* End-of-period comparison table */}
+      <SurfaceCard>
+        <p className="mb-3 text-sm font-semibold text-[#0F172A]">End-of-period comparison</p>
+        <div className="overflow-x-auto">
+          <table className="fin-table w-full">
+            <thead>
+              <tr>
+                <th className="text-left">Scenario</th>
+                <th>Closing Cash</th>
+                <th>Net Income</th>
+                <th>vs Baseline</th>
+              </tr>
+            </thead>
+            <tbody>
+              {seriesNames.map((name, i) => {
+                const series = scenarioResults[name]
+                const cash = series?.cash[lastIdx] ?? 0
+                const ni = series?.netIncome[lastIdx] ?? 0
+                const baseCash = scenarioResults['Baseline']?.cash[lastIdx] ?? 0
+                const delta = cash - baseCash
+                return (
+                  <tr key={name} className="hover-row">
+                    <td className="!font-sans">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
+                        <span className={cn('text-sm font-medium', name === 'Baseline' ? 'text-[#0F172A]' : 'text-[#334155]')}>{name}</span>
+                      </div>
+                    </td>
+                    <td className="font-semibold text-[#0F172A]">{formatAuto(cash)}</td>
+                    <td className={cn('font-semibold', ni >= 0 ? 'text-[#059669]' : 'text-[#DC2626]')}>{formatAuto(ni)}</td>
+                    <td className={cn('font-semibold', name === 'Baseline' ? 'text-[#94A3B8]' : delta >= 0 ? 'text-[#059669]' : 'text-[#DC2626]')}>
+                      {name === 'Baseline' ? '—' : `${delta >= 0 ? '+' : ''}${formatAuto(delta)}`}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </SurfaceCard>
     </div>
   )

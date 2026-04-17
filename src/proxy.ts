@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/health',
   '/api/webhooks(.*)',
   '/api/import/template', // Public blank CSV template — no company data
+  '/manifest.webmanifest', // PWA manifest — must be public
 ])
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
@@ -21,18 +22,46 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
   const isDev = process.env.NODE_ENV === 'development'
 
-  const cspHeader = [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''} https://clerk.cashflowiq.in https://*.clerk.accounts.dev`,
-    `style-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-inline'" : ''} https://fonts.googleapis.com`,
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: blob: https://img.clerk.com",
-    "connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io wss://*.clerk.accounts.dev",
-    "frame-src 'self' https://*.clerk.accounts.dev",
-    "worker-src 'self' blob:",
-    "object-src 'none'",
-    "base-uri 'self'",
-  ].join('; ')
+  // In dev, use a permissive CSP so Clerk's OAuth flows and hot-reload work.
+  // In production, tighten with nonces.
+  const cspHeader = isDev
+    ? [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.clerk.accounts.dev https://clerk.cashflowiq.in https://challenges.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' data: blob: https://img.clerk.com",
+        "connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io wss://*.clerk.accounts.dev ws://localhost:* http://localhost:*",
+        "frame-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com",
+        "worker-src 'self' blob:",
+        "object-src 'none'",
+        "base-uri 'self'",
+      ].join('; ')
+    : [
+        "default-src 'self'",
+        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://clerk.cashflowiq.in https://*.clerk.accounts.dev https://challenges.cloudflare.com`,
+        `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`,
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' data: blob: https://img.clerk.com",
+        "connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io wss://*.clerk.accounts.dev",
+        "frame-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com",
+        "worker-src 'self' blob:",
+        "object-src 'none'",
+        "base-uri 'self'",
+      ].join('; ')
+
+  const isMutationMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)
+  const isApiRequest = request.nextUrl.pathname.startsWith('/api/')
+  const isWebhookRoute = request.nextUrl.pathname.startsWith('/api/webhooks/')
+  if (isMutationMethod && isApiRequest && !isWebhookRoute) {
+    const origin = request.headers.get('origin')
+    if (origin && origin !== request.nextUrl.origin) {
+      return NextResponse.json(
+        { error: 'Invalid request origin' },
+        { status: 403 }
+      )
+    }
+  }
 
   // Skip rate limiting in development for faster iteration
   if (isDev) {

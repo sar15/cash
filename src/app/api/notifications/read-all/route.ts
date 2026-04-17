@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
 
-    await markAllNotificationsRead(ctx.companyId)
+    await markAllNotificationsRead(ctx.companyId, ctx.userId)
     return jsonOk({ success: true })
   } catch {
     return jsonError('Failed to mark all notifications read', 500)

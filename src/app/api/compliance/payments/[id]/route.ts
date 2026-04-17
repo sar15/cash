@@ -5,7 +5,7 @@ import { db, schema } from '@/lib/db'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const ctx = await resolveAuthedCompany(request)

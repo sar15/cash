@@ -1,11 +1,55 @@
 import { eq } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
+import { getFirmClientCompanies } from '@/lib/db/queries/firms'
+import { getOrCreateUserProfile } from '@/lib/db/queries/user-profiles'
 
 export async function getCompaniesForUser(clerkUserId: string) {
   return db.query.companies.findMany({
     where: eq(schema.companies.clerkUserId, clerkUserId),
     orderBy: (companies, { asc }) => [asc(companies.createdAt)],
   })
+}
+
+export async function getAccessibleCompaniesForUser(clerkUserId: string) {
+  const profile = await getOrCreateUserProfile(clerkUserId)
+
+  const owned = await db.query.companies.findMany({
+    where: eq(schema.companies.clerkUserId, clerkUserId),
+    orderBy: (companies, { asc }) => [asc(companies.createdAt)],
+  })
+
+  const members = await db.query.companyMembers.findMany({
+    where: eq(schema.companyMembers.clerkUserId, clerkUserId),
+    with: { company: true },
+  })
+
+  const firmClients =
+    profile.userType === 'ca_firm'
+      ? await getFirmClientCompanies(clerkUserId)
+      : []
+
+  const seen = new Set<string>()
+  const all: typeof owned = []
+  for (const c of owned) {
+    if (!seen.has(c.id)) {
+      seen.add(c.id)
+      all.push(c)
+    }
+  }
+  for (const m of members) {
+    if (m.company && !seen.has(m.company.id)) {
+      seen.add(m.company.id)
+      all.push(m.company)
+    }
+  }
+  for (const c of firmClients) {
+    if (!seen.has(c.id)) {
+      seen.add(c.id)
+      all.push(c)
+    }
+  }
+
+  return all
 }
 
 export async function getCompanyById(companyId: string) {

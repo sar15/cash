@@ -18,7 +18,7 @@ const typeConfig: Record<WizardType, { icon: typeof TrendingUp; label: string; c
   asset: { icon: Building, label: 'Asset', color: 'text-amber-600', bgColor: 'bg-amber-500/10' },
   loan: { icon: Landmark, label: 'Loan', color: 'text-indigo-600', bgColor: 'bg-indigo-500/10' },
   expense: { icon: TrendingDown, label: 'Expense', color: 'text-red-600', bgColor: 'bg-red-500/10' },
-  price_change: { icon: Tag, label: 'Price Change', color: 'text-purple-600', bgColor: 'bg-purple-500/10' },
+  price_change: { icon: Tag, label: 'Price Change', color: 'text-teal-600', bgColor: 'bg-teal-500/10' },
 };
 
 function MicroForecastRow({ item }: { item: MicroForecastItem }) {

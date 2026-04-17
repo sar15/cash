@@ -1,10 +1,13 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse, type NextRequest } from 'next/server'
-import { resolveCompanyForUser } from '@/lib/db/company-context'
+import { resolveCompanyAccessForUser } from '@/lib/db/company-context'
+import type { MemberRole } from '@/lib/db/queries/company-members'
 
 export interface AuthedContext {
   userId: string
   companyId: string
+  role: MemberRole
+  isOwner: boolean
 }
 
 /**
@@ -24,16 +27,29 @@ export async function resolveAuthedCompany(
     request.nextUrl.searchParams.get('companyId') ??
     request.headers.get('x-company-id')
 
-  const company = await resolveCompanyForUser(userId, companyId)
+  const access = await resolveCompanyAccessForUser(userId, companyId)
 
-  if (!company) {
+  if (!access) {
     return NextResponse.json(
       { error: 'Company not found or access denied' },
       { status: 403 }
     )
   }
 
-  return { userId, companyId: company.id }
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+  if (isMutation && access.role === 'viewer' && !access.isOwner) {
+    return NextResponse.json(
+      { error: 'Insufficient permissions for this action' },
+      { status: 403 }
+    )
+  }
+
+  return {
+    userId,
+    companyId: access.company.id,
+    role: access.role,
+    isOwner: access.isOwner,
+  }
 }
 
 export function isErrorResponse(

@@ -13,31 +13,57 @@ export default function ReportsPage() {
   const [periodEnd, setPeriodEnd] = useState('')
   const [includeWaterfall, setIncludeWaterfall] = useState(true)
   const [includeScenarios, setIncludeScenarios] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleGenerate = async () => {
     if (!companyId || !periodStart || !periodEnd) return
 
     setIsGenerating(true)
+    setError(null)
     try {
+      // Convert YYYY-MM to YYYY-MM-DD (first and last day of month)
+      const startDate = `${periodStart}-01`
+      const endParts = periodEnd.split('-')
+      const lastDay = new Date(parseInt(endParts[0]), parseInt(endParts[1]), 0).getDate()
+      const endDate = `${periodEnd}-${String(lastDay).padStart(2, '0')}`
+
       const response = await fetch('/api/reports/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyId,
-          periodStart,
-          periodEnd,
+          periodStart: startDate,
+          periodEnd: endDate,
           includeWaterfall,
           includeScenarios,
         }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        // Open download URL
-        window.open(data.downloadUrl, '_blank')
+        const contentType = response.headers.get('content-type') ?? ''
+        if (contentType.includes('application/pdf')) {
+          // Direct PDF download (no R2)
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${company?.name ?? 'report'}_${periodStart}_${periodEnd}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+        } else {
+          // R2 URL redirect
+          const data = await response.json()
+          window.open(data.downloadUrl, '_blank')
+        }
+      } else {
+        const err = await response.json().catch(() => ({ error: 'Report generation failed' }))
+        setError((err as { error?: string }).error ?? 'Report generation failed')
       }
     } catch (error) {
       console.error('Report generation failed:', error)
+      setError('Failed to generate report. Please try again.')
     } finally {
       setIsGenerating(false)
     }
@@ -124,21 +150,24 @@ export default function ReportsPage() {
                   'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors',
                   isGenerating || !periodStart || !periodEnd
                     ? 'cursor-not-allowed bg-[#94A3B8]'
-                    : 'bg-[#059669] hover:bg-[#047857]'
+                    : 'bg-[#2563EB] hover:bg-[#1D4ED8]'
                 )}
               >
                 {isGenerating ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Generating...
+                    Generating PDF...
                   </>
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    Generate Report
+                    Download PDF Report
                   </>
                 )}
               </button>
+              {error && (
+                <p className="text-sm text-[#DC2626]">{error}</p>
+              )}
             </div>
           </div>
         </div>

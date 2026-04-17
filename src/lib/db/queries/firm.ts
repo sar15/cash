@@ -1,6 +1,8 @@
 import { db } from '@/lib/db'
 import { companies, companyMembers, forecastResults, gstFilings } from '@/lib/db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
+import { getFirmClientCompanies } from '@/lib/db/queries/firms'
+import { getOrCreateUserProfile } from '@/lib/db/queries/user-profiles'
 
 export interface FirmCompanySummary {
   id: string
@@ -18,6 +20,7 @@ export interface FirmCompanySummary {
  * from cached forecast_results — no engine re-run on page load.
  */
 export async function getFirmCompanies(clerkUserId: string): Promise<FirmCompanySummary[]> {
+  const profile = await getOrCreateUserProfile(clerkUserId)
   // Get companies where user is owner
   const ownedCompanies = await db.query.companies.findMany({
     where: eq(companies.clerkUserId, clerkUserId),
@@ -37,6 +40,13 @@ export async function getFirmCompanies(clerkUserId: string): Promise<FirmCompany
   }
   for (const m of memberRows) {
     if (m.company && !seen.has(m.company.id)) { seen.add(m.company.id); allCompanies.push(m.company) }
+  }
+
+  if (profile.userType === 'ca_firm') {
+    const firmCompanies = await getFirmClientCompanies(clerkUserId)
+    for (const c of firmCompanies) {
+      if (!seen.has(c.id)) { seen.add(c.id); allCompanies.push(c) }
+    }
   }
 
   const today = new Date()

@@ -9,7 +9,6 @@ import {
   Briefcase,
   Plus,
   Loader2,
-  X,
   TrendingUp,
   AlertOctagon,
   CalendarDays,
@@ -18,6 +17,8 @@ import {
 import Link from 'next/link'
 import { SurfaceCard } from '@/components/shared/page-header'
 import { formatAuto } from '@/lib/utils/indian-format'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 // ── Add Client Modal ──────────────────────────────────────────────────────
 
@@ -38,24 +39,35 @@ function AddClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-md rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
-          <h2 className="text-sm font-semibold text-[#0F172A]">Add Client Company</h2>
-          <button onClick={onClose} className="rounded p-1 text-[#94A3B8] hover:bg-[#F8FAFC] hover:text-[#475569]">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="space-y-4 p-5">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Client Company</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#64748B]">Company Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sharma Textiles Pvt Ltd"
-              className="mt-1.5 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172A] placeholder:text-[#CBD5E1] focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/20" autoFocus />
+            <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              Company Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Sharma Textiles Pvt Ltd"
+              className="mt-1.5 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring/20"
+              autoFocus
+            />
           </div>
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#64748B]">Industry</label>
-            <select value={industry} onChange={(e) => setIndustry(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172A] focus:border-[#2563EB] focus:outline-none">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              Industry
+            </label>
+            <select
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none"
+            >
               <option value="manufacturing">Manufacturing</option>
               <option value="services">Professional Services</option>
               <option value="technology">Technology</option>
@@ -65,13 +77,17 @@ function AddClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name:
               <option value="other">Other</option>
             </select>
           </div>
-          <button onClick={handleAdd} disabled={!name.trim() || isAdding}
-            className="w-full rounded-lg bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-40">
-            {isAdding ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : 'Add Client'}
-          </button>
         </div>
-      </div>
-    </div>
+
+        <DialogFooter className="sm:justify-between">
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <Button onClick={handleAdd} disabled={!name.trim() || isAdding}>
+            {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Add Client
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

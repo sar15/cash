@@ -1,46 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveAuthedCompany, isErrorResponse, jsonError } from '@/lib/api/helpers'
+import { resolveAuthedCompany, isErrorResponse } from '@/lib/api/helpers'
 import { db } from '@/lib/db'
 import { companies } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { getForecastResult } from '@/lib/db/queries/forecast-results'
 import { getAccountsForCompany } from '@/lib/db/queries/accounts'
 import { generatePDFReport } from '@/lib/reports/pdf-generator'
-import { uploadFile } from '@/lib/r2'
 import type { EngineResult } from '@/lib/engine'
 import type { ComplianceResult } from '@/lib/engine/compliance'
 import type { Account } from '@/stores/accounts-store'
+import { parseJsonBody } from '@/lib/server/api'
+import { handleRouteError } from '@/lib/server/api'
+import { z } from 'zod'
+import {
+  findIdempotentResponse,
+  getIdempotencyKey,
+  saveIdempotentResponse,
+  toIdempotencyResponse,
+} from '@/lib/server/idempotency'
+
+const reportRequestSchema = z.object({
+  companyId: z.string().optional(),
+  periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  scenarioId: z.string().nullable().optional(),
+  includeWaterfall: z.boolean().optional(),
+  includeScenarios: z.boolean().optional(),
+})
 
 export async function POST(request: NextRequest) {
   try {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
 
-    const body = await request.json() as {
-      companyId: string
-      periodStart: string
-      periodEnd: string
-      scenarioId?: string | null
-      includeWaterfall?: boolean
-      includeScenarios?: boolean
-    }
-
+    const body = await parseJsonBody(request, reportRequestSchema)
     const { periodStart, periodEnd, scenarioId, includeWaterfall, includeScenarios } = body
 
-    if (!periodStart || !periodEnd) {
-      return jsonError('periodStart and periodEnd are required', 400)
+    const idempotencyKey = getIdempotencyKey(request)
+    if (idempotencyKey) {
+      const cached = await findIdempotentResponse({
+        key: idempotencyKey,
+        companyId: ctx.companyId,
+        route: request.nextUrl.pathname,
+        method: request.method,
+      })
+      if (cached) {
+        return toIdempotencyResponse(cached)
+      }
     }
 
     // Fetch company
     const company = await db.query.companies.findFirst({
-      where: and(eq(companies.id, ctx.companyId), eq(companies.clerkUserId, ctx.userId)),
+      where: eq(companies.id, ctx.companyId),
     })
-    if (!company) return jsonError('Company not found', 404)
+    if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
 
     // Fetch cached forecast result
     const cachedResult = await getForecastResult(ctx.companyId, scenarioId ?? null)
     if (!cachedResult) {
-      return jsonError('No forecast data found. Please open the Forecast page to generate a forecast first.', 422)
+      return NextResponse.json(
+        { error: 'No forecast data found. Please open the Forecast page to generate a forecast first.' },
+        { status: 422 }
+      )
     }
 
     // Reconstruct EngineResult from cached JSON
@@ -116,20 +137,40 @@ export async function POST(request: NextRequest) {
       includeScenarios,
     })
 
-    // Upload to R2 (or local fallback)
-    const key = `reports/${ctx.companyId}/${Date.now()}_report.pdf`
-    await uploadFile(key, pdfBuffer, 'application/pdf')
+    // Upload to storage if configured (Uploadthing), otherwise return PDF directly
+    const { uploadFile, isStorageConfigured, generateUploadKey } = await import('@/lib/storage')
 
-    // Return download URL — direct API endpoint serves the file
-    const downloadUrl = `/api/reports/download?key=${encodeURIComponent(key)}&companyId=${ctx.companyId}`
+    if (isStorageConfigured()) {
+      const key = generateUploadKey(ctx.companyId, 'report.pdf').replace('uploads/', 'reports/')
+      const storedKey = await uploadFile(key, pdfBuffer, 'application/pdf')
+      const downloadUrl = `/api/reports/download?key=${encodeURIComponent(storedKey)}&companyId=${ctx.companyId}`
+      const payload = {
+        success: true,
+        downloadUrl,
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      }
+      if (idempotencyKey) {
+        await saveIdempotentResponse(
+          { key: idempotencyKey, companyId: ctx.companyId, route: request.nextUrl.pathname, method: request.method },
+          200, payload
+        )
+      }
+      return NextResponse.json(payload)
+    }
 
-    return NextResponse.json({
-      success: true,
-      downloadUrl,
-      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    // No R2 — return PDF directly as a download
+    const filename = `${company.name.replace(/[^a-z0-9]/gi, '_')}_report_${periodStart}_${periodEnd}.pdf`
+    const arrayBuffer = pdfBuffer.buffer instanceof SharedArrayBuffer
+      ? new Uint8Array(pdfBuffer).buffer
+      : pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
+    return new Response(arrayBuffer as ArrayBuffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'private, no-store',
+      },
     })
   } catch (err) {
-    console.error('[Reports] PDF generation failed:', err)
-    return jsonError('Failed to generate report', 500)
+    return handleRouteError('REPORTS_GENERATE_POST', err)
   }
 }

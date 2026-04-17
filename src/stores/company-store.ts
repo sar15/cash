@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api/client'
+import { useProfileStore } from '@/stores/profile-store'
 
 export interface Company {
   id: string
@@ -40,7 +41,7 @@ interface CompanyState {
 
   // Computed
   activeCompany: () => Company | null
-  isCA: () => boolean // CA = manages multiple companies
+  isCA: () => boolean // CA/Firm persona mode
 
   // Actions
   loadCompanies: () => Promise<void>
@@ -61,7 +62,7 @@ export const useCompanyStore = create<CompanyState>((set, get) => ({
     return companies.find((c) => c.id === activeCompanyId) ?? null
   },
 
-  isCA: () => get().companies.length > 1,
+  isCA: () => useProfileStore.getState().profile?.userType === 'ca_firm',
 
   loadCompanies: async () => {
     if (get().isLoading) return

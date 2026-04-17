@@ -198,23 +198,57 @@ export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName
 }
 
 export function buildImportTemplateCsv(months = [
-  'Apr-25',
-  'May-25',
-  'Jun-25',
-  'Jul-25',
-  'Aug-25',
-  'Sep-25',
-  'Oct-25',
-  'Nov-25',
-  'Dec-25',
-  'Jan-26',
-  'Feb-26',
-  'Mar-26',
+  'Apr-25', 'May-25', 'Jun-25', 'Jul-25', 'Aug-25', 'Sep-25',
+  'Oct-25', 'Nov-25', 'Dec-25', 'Jan-26', 'Feb-26', 'Mar-26',
 ]) {
-  const header = ['Particulars', ...months].map(escapeCsvCell).join(',')
-  const rows = STANDARD_INDIAN_COA.map((account) =>
-    [account.name, ...months.map(() => '')].map(escapeCsvCell).join(',')
-  )
+  // Group accounts by category for better readability
+  const sections: Array<{ comment: string; accounts: typeof STANDARD_INDIAN_COA }> = [
+    {
+      comment: '# REVENUE — Enter monthly income amounts in Indian Rupees (not paise)',
+      accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Revenue'),
+    },
+    {
+      comment: '# COST OF GOODS SOLD — Direct costs to produce goods/services',
+      accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'COGS'),
+    },
+    {
+      comment: '# OPERATING EXPENSES — Indirect/overhead costs',
+      accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Operating Expenses'),
+    },
+    {
+      comment: '# ASSETS — Balance sheet assets (enter closing balance for each month)',
+      accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Assets'),
+    },
+    {
+      comment: '# LIABILITIES — Balance sheet liabilities (enter closing balance for each month)',
+      accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Liabilities'),
+    },
+    {
+      comment: '# EQUITY — Share capital and retained earnings',
+      accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Equity'),
+    },
+  ]
 
-  return [header, ...rows].join('\n')
+  const header = ['Particulars', ...months].map(escapeCsvCell).join(',')
+
+  // Instructions row
+  const instructions = [
+    '# HOW TO USE: Fill in monthly amounts in Indian Rupees. Leave blank if not applicable. Do not change account names.',
+    ...months.map(() => ''),
+  ].map(escapeCsvCell).join(',')
+
+  const rows: string[] = [header, instructions]
+
+  for (const section of sections) {
+    // Section comment row
+    rows.push([section.comment, ...months.map(() => '')].map(escapeCsvCell).join(','))
+    // Account rows
+    for (const account of section.accounts) {
+      rows.push([account.name, ...months.map(() => '')].map(escapeCsvCell).join(','))
+    }
+    // Blank separator
+    rows.push(['', ...months.map(() => '')].join(','))
+  }
+
+  return rows.join('\n')
 }

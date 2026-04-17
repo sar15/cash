@@ -266,7 +266,7 @@ export function useCurrentForecast(): ForecastData {
         totalNetIncome: engineResult.rawIntegrationResults.reduce((s, m) => s + (m?.pl?.netIncome ?? 0), 0),
         forecastMonths: engineResult.forecastMonths,
       }
-      apiPost(`/api/forecast/result/${company.id}`, {
+      apiPost(`/api/forecast/result?companyId=${company.id}`, {
         scenarioId: null,
         plData: { accountForecasts: engineResult.accountForecasts },
         bsData: { months: engineResult.rawIntegrationResults.map(m => m?.bs) },

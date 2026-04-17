@@ -7,15 +7,11 @@ import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 import { db, schema } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
-
 const toggleSchema = z.object({
   isActive: z.boolean(),
 })
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params

@@ -3,10 +3,16 @@ import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import { companies } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
+import { z } from 'zod'
+
+const lockPeriodSchema = z.object({
+  period: z.string().regex(/^\d{4}-\d{2}-01$/, 'Period must be YYYY-MM-01'),
+  action: z.enum(['lock', 'unlock']),
+})
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<any> }
 ) {
   const { userId } = await auth()
   if (!userId) {
@@ -14,15 +20,11 @@ export async function PATCH(
   }
 
   const { id: companyId } = await context.params
-  const body = await request.json()
-  const { period, action } = body as { period: string; action: 'lock' | 'unlock' }
-
-  if (!period || !action) {
-    return NextResponse.json(
-      { error: 'Missing period or action' },
-      { status: 400 }
-    )
+  const parsed = lockPeriodSchema.safeParse(await request.json())
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
+  const { period, action } = parsed.data
 
   // Verify ownership
   const company = await db.query.companies.findFirst({
@@ -33,35 +35,59 @@ export async function PATCH(
     return NextResponse.json({ error: 'Company not found' }, { status: 404 })
   }
 
-  // Parse current locked periods
-  let lockedPeriods: string[] = []
-  try {
-    lockedPeriods = JSON.parse(company.lockedPeriods || '[]')
-  } catch {
-    lockedPeriods = []
-  }
-
-  // Update locked periods
-  if (action === 'lock') {
-    if (!lockedPeriods.includes(period)) {
-      lockedPeriods.push(period)
-      lockedPeriods.sort() // Keep sorted
-    }
-  } else if (action === 'unlock') {
-    lockedPeriods = lockedPeriods.filter((p) => p !== period)
-  }
-
-  // Save to database
-  await db
-    .update(companies)
-    .set({
-      lockedPeriods: JSON.stringify(lockedPeriods),
-      updatedAt: new Date().toISOString(),
+  // Optimistic concurrency control to avoid clobbering concurrent lock/unlock updates.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const current = await db.query.companies.findFirst({
+      where: and(eq(companies.id, companyId), eq(companies.clerkUserId, userId)),
+      columns: { lockedPeriods: true },
     })
-    .where(eq(companies.id, companyId))
+    if (!current) {
+      return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+    }
 
-  return NextResponse.json({
-    success: true,
-    lockedPeriods,
-  })
+    let lockedPeriods: string[] = []
+    try {
+      lockedPeriods = JSON.parse(current.lockedPeriods || '[]')
+    } catch {
+      lockedPeriods = []
+    }
+
+    if (action === 'lock') {
+      if (!lockedPeriods.includes(period)) {
+        lockedPeriods.push(period)
+        lockedPeriods.sort()
+      }
+    } else {
+      lockedPeriods = lockedPeriods.filter((p) => p !== period)
+    }
+
+    const originalLockedPeriods = current.lockedPeriods || '[]'
+    const updatedLockedPeriods = JSON.stringify(lockedPeriods)
+    const updated = await db
+      .update(companies)
+      .set({
+        lockedPeriods: updatedLockedPeriods,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(
+        and(
+          eq(companies.id, companyId),
+          eq(companies.clerkUserId, userId),
+          eq(companies.lockedPeriods, originalLockedPeriods)
+        )
+      )
+      .returning({ id: companies.id })
+
+    if (updated.length > 0) {
+      return NextResponse.json({
+        success: true,
+        lockedPeriods,
+      })
+    }
+  }
+
+  return NextResponse.json(
+    { error: 'Concurrent update detected. Please retry.' },
+    { status: 409 }
+  )
 }

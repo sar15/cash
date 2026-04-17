@@ -5,17 +5,13 @@ import { updateCompany } from '@/lib/db/queries/companies'
 import { handleRouteError, jsonResponse, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
-interface RouteContext {
-  params: Promise<{ companyId: string }>
-}
-
 const updateBrandingSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   logoUrl: z.string().url().nullable().optional(),
   numberFormat: z.enum(['lakhs', 'crores', 'millions']).optional(),
 })
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId } = await context.params
@@ -34,7 +30,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId } = await context.params

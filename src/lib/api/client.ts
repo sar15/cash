@@ -23,10 +23,30 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
   timeout?: number
   /** Max retry attempts on network errors / 5xx. Default: 3 */
   retries?: number
+  /**
+   * Idempotency key behavior for unsafe mutations.
+   * - undefined: auto-generate for POST/PUT/PATCH/DELETE
+   * - string: use provided key
+   * - false: do not send the header
+   */
+  idempotencyKey?: string | false
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      const data = await response.json().catch(() => ({}))
+      const message = (() => {
+        if (data && typeof data === 'object' && 'error' in data) {
+          const err = (data as { error?: unknown }).error
+          if (typeof err === 'string') return err
+        }
+        return JSON.stringify(data)
+      })()
+      throw new ApiError(response.status, message, data)
+    }
+
     const text = await response.text().catch(() => 'Unknown error')
     throw new ApiError(response.status, text, null)
   }
@@ -55,7 +75,7 @@ function isRetryable(error: unknown): boolean {
 }
 
 export async function api<T = unknown>(url: string, options: FetchOptions = {}): Promise<T> {
-  const { body, headers, timeout = 30_000, retries = 3, ...rest } = options
+  const { body, headers, timeout = 30_000, retries = 3, idempotencyKey, ...rest } = options
 
   const config: RequestInit = {
     ...rest,
@@ -63,6 +83,13 @@ export async function api<T = unknown>(url: string, options: FetchOptions = {}):
       'Content-Type': 'application/json',
       ...headers,
     },
+  }
+
+  const method = (config.method ?? 'GET').toUpperCase()
+  const isUnsafeMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+  if (isUnsafeMutation && idempotencyKey !== false) {
+    const key = typeof idempotencyKey === 'string' ? idempotencyKey : crypto.randomUUID()
+    ;(config.headers as Record<string, string>)['Idempotency-Key'] = key
   }
 
   if (body !== undefined) {

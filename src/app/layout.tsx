@@ -23,6 +23,11 @@ export const metadata: Metadata = {
     "Three-way integrated forecasting platform. Upload P&L + Balance Sheet, get a 12-month Projected P&L, Balance Sheet & Cash Flow Statement with GST/TDS compliance.",
   applicationName: "CashFlowIQ",
   keywords: ["financial forecasting", "indian sme", "cash flow", "balance sheet", "P&L"],
+  openGraph: {
+    title: "CashFlowIQ — Financial Forecasting for Indian SMEs",
+    description: "Three-way integrated forecasting platform.",
+    type: "website",
+  },
 }
 
 export const viewport: Viewport = {
@@ -35,7 +40,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      signInFallbackRedirectUrl="/dashboard"
+      signUpFallbackRedirectUrl="/dashboard"
+    >
       <html lang="en" className={`${inter.variable} ${ibmPlexMono.variable} h-full antialiased`} suppressHydrationWarning>
         <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
           <TooltipProvider delay={300}>

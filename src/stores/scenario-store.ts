@@ -34,6 +34,7 @@ interface ScenarioState {
   selectedScenarioId: string | null
   isLoading: boolean
   error: string | null
+  revision: number
 
   // Computed
   selectedScenario: () => Scenario | null
@@ -97,6 +98,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   selectedScenarioId: null,
   isLoading: false,
   error: null,
+  revision: 0,
 
   selectedScenario: () => {
     const { scenarios, selectedScenarioId } = get()
@@ -114,7 +116,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         ? get().selectedScenarioId
         : null
 
-      set({ scenarios, selectedScenarioId, isLoading: false })
+      set((s) => ({ scenarios, selectedScenarioId, isLoading: false, revision: s.revision + 1 }))
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Failed to load scenarios', isLoading: false })
     }
@@ -128,7 +130,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         : (response as Scenario)
     )
 
-    set((s) => ({ scenarios: [...s.scenarios, scenario] }))
+    set((s) => ({ scenarios: [...s.scenarios, scenario], revision: s.revision + 1 }))
     return scenario
   },
 
@@ -142,6 +144,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
 
     set((s) => ({
       scenarios: s.scenarios.map((sc) => (sc.id === id ? { ...sc, ...updated } : sc)),
+      revision: s.revision + 1,
     }))
   },
 
@@ -150,6 +153,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
     set((s) => ({
       scenarios: s.scenarios.filter((sc) => sc.id !== id),
       selectedScenarioId: s.selectedScenarioId === id ? null : s.selectedScenarioId,
+      revision: s.revision + 1,
     }))
   },
 
@@ -175,6 +179,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       scenarios: s.scenarios.map((sc) =>
         sc.id === scenarioId ? { ...sc, overrides: savedOverrides } : sc
       ),
+      revision: s.revision + 1,
     }))
   },
 }))

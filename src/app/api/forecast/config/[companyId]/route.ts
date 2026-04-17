@@ -9,11 +9,7 @@ import {
 import { handleRouteError, jsonResponse } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
-interface RouteContext {
-  params: Promise<{ companyId: string }>
-}
-
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId } = await context.params

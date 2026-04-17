@@ -1,11 +1,21 @@
 import { Resend } from 'resend'
+import { withRetry, withTimeout } from '@/lib/server/resilience'
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null
 
-// Use configured from address, fallback to Resend's onboarding domain for dev
-const FROM = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
+// Use configured from address only — no fallback to test domain
+const FROM = process.env.RESEND_FROM_EMAIL ?? ''
+const EMAIL_TIMEOUT_MS = 8_000
+
+async function sendEmailWithResilience(payload: Parameters<Resend['emails']['send']>[0]) {
+  if (!resend) return
+  await withRetry(
+    () => withTimeout(resend.emails.send(payload), EMAIL_TIMEOUT_MS, 'Email send'),
+    3
+  )
+}
 
 export interface ComplianceReminderData {
   to: string
@@ -41,7 +51,7 @@ export async function sendComplianceReminder(data: ComplianceReminderData) {
   const urgency = data.daysUntil <= 1 ? '🚨 URGENT: ' : data.daysUntil <= 3 ? '⚠️ ' : ''
   const subject = `${urgency}${data.obligationType} due in ${data.daysUntil} day${data.daysUntil === 1 ? '' : 's'} — ${data.companyName}`
 
-  await resend.emails.send({
+  await sendEmailWithResilience({
     from: FROM,
     to: data.to,
     subject,
@@ -59,7 +69,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
     return
   }
 
-  await resend.emails.send({
+  await sendEmailWithResilience({
     from: FROM,
     to: data.to,
     subject: 'Welcome to CashFlowIQ — your 12-month forecast is ready',
@@ -77,7 +87,7 @@ export async function sendImportSuccessEmail(data: ImportSuccessData) {
     return
   }
 
-  await resend.emails.send({
+  await sendEmailWithResilience({
     from: FROM,
     to: data.to,
     subject: `Import complete — ${data.accountsCount} accounts, ${data.periodsCount} months imported`,

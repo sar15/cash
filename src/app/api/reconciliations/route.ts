@@ -1,73 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { companies, bankReconciliations } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { bankReconciliations } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import { isErrorResponse, resolveAuthedCompany } from '@/lib/api/helpers'
+import { parseJsonBody } from '@/lib/server/api'
+import { handleRouteError } from '@/lib/server/api'
+import { z } from 'zod'
+import {
+  findIdempotentResponse,
+  getIdempotencyKey,
+  saveIdempotentResponse,
+  toIdempotencyResponse,
+} from '@/lib/server/idempotency'
+
+const createReconciliationSchema = z.object({
+  companyId: z.string().optional(),
+  period: z.string().regex(/^\d{4}-\d{2}-01$/),
+  bookClosingBalancePaise: z.number().int(),
+})
 
 // Auth pattern: uses auth() + inline ownership check (equivalent to resolveAuthedCompany).
 // Kept as-is because companyId comes from query/body, not a path param, and the
 // ownership check (companies.clerkUserId === userId) provides the same isolation guarantee.
 
 export async function GET(request: NextRequest) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const ctx = await resolveAuthedCompany(request)
+    if (isErrorResponse(ctx)) return ctx
+
+    const reconciliations = await db.query.bankReconciliations.findMany({
+      where: eq(bankReconciliations.companyId, ctx.companyId),
+      orderBy: (recons, { desc }) => [desc(recons.period)],
+    })
+
+    return NextResponse.json({ reconciliations })
+  } catch (error) {
+    return handleRouteError('RECONCILIATIONS_GET', error)
   }
-
-  const companyId = request.nextUrl.searchParams.get('companyId')
-  if (!companyId) {
-    return NextResponse.json({ error: 'Missing companyId' }, { status: 400 })
-  }
-
-  // Verify ownership
-  const company = await db.query.companies.findFirst({
-    where: and(eq(companies.id, companyId), eq(companies.clerkUserId, userId)),
-  })
-
-  if (!company) {
-    return NextResponse.json({ error: 'Company not found' }, { status: 404 })
-  }
-
-  const reconciliations = await db.query.bankReconciliations.findMany({
-    where: eq(bankReconciliations.companyId, companyId),
-    orderBy: (recons, { desc }) => [desc(recons.period)],
-  })
-
-  return NextResponse.json({ reconciliations })
 }
 
 export async function POST(request: NextRequest) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const ctx = await resolveAuthedCompany(request)
+    if (isErrorResponse(ctx)) return ctx
+    const { period, bookClosingBalancePaise } = await parseJsonBody(
+      request,
+      createReconciliationSchema
+    )
+
+    const idempotencyKey = getIdempotencyKey(request)
+    if (idempotencyKey) {
+      const cached = await findIdempotentResponse({
+        key: idempotencyKey,
+        companyId: ctx.companyId,
+        route: request.nextUrl.pathname,
+        method: request.method,
+      })
+      if (cached) {
+        return toIdempotencyResponse(cached)
+      }
+    }
+
+    // Create reconciliation record
+    await db
+      .insert(bankReconciliations)
+      .values({
+        id: crypto.randomUUID(),
+        companyId: ctx.companyId,
+        period,
+        status: 'unreconciled',
+        bookClosingBalancePaise,
+        bankClosingBalancePaise: null,
+        variancePaise: null,
+      })
+      .onConflictDoUpdate({
+        target: [bankReconciliations.companyId, bankReconciliations.period],
+        set: {
+          bookClosingBalancePaise,
+        },
+      })
+
+    const payload = { success: true }
+    if (idempotencyKey) {
+      await saveIdempotentResponse(
+        {
+          key: idempotencyKey,
+          companyId: ctx.companyId,
+          route: request.nextUrl.pathname,
+          method: request.method,
+        },
+        200,
+        payload
+      )
+    }
+
+    return NextResponse.json(payload)
+  } catch (error) {
+    return handleRouteError('RECONCILIATIONS_POST', error)
   }
-
-  const body = await request.json()
-  const { companyId, period, bookClosingBalancePaise } = body as {
-    companyId: string
-    period: string
-    bookClosingBalancePaise: number
-  }
-
-  // Verify ownership
-  const company = await db.query.companies.findFirst({
-    where: and(eq(companies.id, companyId), eq(companies.clerkUserId, userId)),
-  })
-
-  if (!company) {
-    return NextResponse.json({ error: 'Company not found' }, { status: 404 })
-  }
-
-  // Create reconciliation record
-  await db.insert(bankReconciliations).values({
-    id: crypto.randomUUID(),
-    companyId,
-    period,
-    status: 'unreconciled',
-    bookClosingBalancePaise,
-    bankClosingBalancePaise: null,
-    variancePaise: null,
-  })
-
-  return NextResponse.json({ success: true })
 }

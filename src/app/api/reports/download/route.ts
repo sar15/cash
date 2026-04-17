@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { resolveAuthedCompany, isErrorResponse, jsonError } from '@/lib/api/helpers'
-import { getFile } from '@/lib/r2'
+import { getFile } from '@/lib/storage'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,8 +10,9 @@ export async function GET(request: NextRequest) {
     const key = request.nextUrl.searchParams.get('key')
     if (!key) return jsonError('Missing key', 400)
 
-    // Security: key must belong to this company
-    if (!key.startsWith(`reports/${ctx.companyId}/`)) {
+    // Security: internal key must belong to this company
+    const internalKey = key.startsWith('ut:') ? key.slice(key.indexOf(':', 3) + 1) : key
+    if (!internalKey.startsWith(`reports/${ctx.companyId}/`)) {
       return jsonError('Forbidden', 403)
     }
 

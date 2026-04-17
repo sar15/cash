@@ -26,11 +26,11 @@ describe('Gap 1 — Forecast result URL (bug condition exploration)', () => {
       'utf-8'
     )
 
-    // Must NOT contain the buggy query-string pattern
-    expect(src).not.toMatch(/apiPost\s*\(\s*`\/api\/forecast\/result\?companyId=\$\{/)
+    // MUST contain the correct query-string pattern (supports team members via resolveAuthedCompany)
+    expect(src).toMatch(/apiPost\s*\(\s*`\/api\/forecast\/result\?companyId=\$\{/)
 
-    // MUST contain the correct path-param pattern
-    expect(src).toMatch(/apiPost\s*\(\s*`\/api\/forecast\/result\/\$\{/)
+    // Must NOT contain the old path-param pattern (hits requireOwnedCompany, blocks team members)
+    expect(src).not.toMatch(/apiPost\s*\(\s*`\/api\/forecast\/result\/\$\{/)
   })
 
   it('companyId is NOT included in the POST body (resolveAuthedCompany reads from query string)', () => {

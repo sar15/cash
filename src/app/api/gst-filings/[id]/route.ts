@@ -1,44 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { gstFilings, companies } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { gstFilings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { markFilingAsFiled } from '@/lib/db/queries/gst-filings'
+import { isErrorResponse, resolveAuthedCompany } from '@/lib/api/helpers'
+import { parseJsonBody } from '@/lib/server/api'
+import { z } from 'zod'
+import { handleRouteError } from '@/lib/server/api'
+
+const patchGstFilingSchema = z.object({
+  referenceNumber: z.string().trim().max(128).optional(),
+})
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<any> }
 ) {
-  const { userId } = await auth()
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const ctx = await resolveAuthedCompany(request)
+    if (isErrorResponse(ctx)) return ctx
+
+    const { id: filingId } = await context.params
+    const { referenceNumber } = await parseJsonBody(request, patchGstFilingSchema)
+
+    // Get filing and verify ownership
+    const filing = await db.query.gstFilings.findFirst({
+      where: eq(gstFilings.id, filingId),
+    })
+
+    if (!filing) {
+      return NextResponse.json({ error: 'Filing not found' }, { status: 404 })
+    }
+
+    if (filing.companyId !== ctx.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
+    await markFilingAsFiled(filingId, referenceNumber)
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return handleRouteError('GST_FILING_ID_PATCH', error)
   }
-
-  const { id: filingId } = await context.params
-  const body = await request.json()
-  const { referenceNumber } = body as { referenceNumber?: string }
-
-  // Get filing and verify ownership
-  const filing = await db.query.gstFilings.findFirst({
-    where: eq(gstFilings.id, filingId),
-  })
-
-  if (!filing) {
-    return NextResponse.json({ error: 'Filing not found' }, { status: 404 })
-  }
-
-  const company = await db.query.companies.findFirst({
-    where: and(
-      eq(companies.id, filing.companyId),
-      eq(companies.clerkUserId, userId)
-    ),
-  })
-
-  if (!company) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-  }
-
-  await markFilingAsFiled(filingId, referenceNumber)
-
-  return NextResponse.json({ success: true })
 }

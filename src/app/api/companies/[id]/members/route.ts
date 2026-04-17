@@ -1,13 +1,16 @@
 import { type NextRequest } from 'next/server'
 import { getMembersForCompany, addMember, removeMember } from '@/lib/db/queries/company-members'
-import { handleRouteError, jsonResponse, noContent } from '@/lib/server/api'
+import { handleRouteError, jsonResponse, noContent, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
+import { z } from 'zod'
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
+const addMemberSchema = z.object({
+  clerkUserId: z.string().min(1),
+  role: z.enum(['editor', 'viewer']).optional(),
+  invitedEmail: z.string().email().optional(),
+})
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
@@ -19,15 +22,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
     await requireOwnedCompany(userId, id)
-    const body = await request.json() as { clerkUserId: string; role?: 'editor' | 'viewer'; invitedEmail?: string }
-    if (!body.clerkUserId) {
-      return jsonResponse({ error: 'clerkUserId required' }, { status: 400 })
-    }
+    const body = await parseJsonBody(request, addMemberSchema)
     const member = await addMember(id, body.clerkUserId, body.role ?? 'viewer', userId, body.invitedEmail)
     return jsonResponse({ member }, { status: 201 })
   } catch (error) {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params

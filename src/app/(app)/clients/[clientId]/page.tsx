@@ -61,7 +61,12 @@ export default function ClientDetailPage() {
     const ap = lastMonth?.bs?.ap ?? 0
     const monthlyRev = lastMonth?.pl?.revenue ?? 1
     const wcDays = Math.round(((ar - ap) / Math.max(Math.abs(monthlyRev), 1)) * 30)
-    return { cashPosition, runway, netIncome, wcDays }
+    const totalRevenue = months.reduce((sum: number, m: typeof months[0]) => sum + (m?.pl?.revenue ?? 0), 0)
+    const totalCogs = months.reduce((sum: number, m: typeof months[0]) => sum + (m?.pl?.cogs ?? 0), 0)
+    const grossMarginPct = totalRevenue > 0 ? ((totalRevenue - totalCogs) / totalRevenue) * 100 : 0
+    const operatingCashFlow = months.reduce((sum: number, m: typeof months[0]) => sum + (m?.cf?.operatingCashFlow ?? 0), 0)
+    const freeCashFlow = months.reduce((sum: number, m: typeof months[0]) => sum + (m?.cf?.operatingCashFlow ?? 0) + (m?.cf?.investingCashFlow ?? 0), 0)
+    return { cashPosition, runway, netIncome, wcDays, grossMarginPct, operatingCashFlow, freeCashFlow }
   })()
 
   // Compliance alerts from engine
@@ -121,6 +126,9 @@ export default function ClientDetailPage() {
             runway={metrics.runway}
             netIncome={metrics.netIncome}
             workingCapitalDays={metrics.wcDays}
+            grossMarginPct={metrics.grossMarginPct}
+            operatingCashFlow={metrics.operatingCashFlow}
+            freeCashFlow={metrics.freeCashFlow}
             monthlyCash={(engineResult?.rawIntegrationResults ?? []).map(m => m?.bs?.cash ?? 0)}
             monthlyNetIncome={(engineResult?.rawIntegrationResults ?? []).map(m => m?.pl?.netIncome ?? 0)}
           />

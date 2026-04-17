@@ -10,7 +10,9 @@ const requestSchema = z.object({
   companyId: z.string().uuid(),
 })
 
-// Indian manufacturing SME demo data
+// Indian manufacturing SME demo data — Pune-based auto components manufacturer
+// Revenue: ~₹50-65L/month, growing ~5% over the year
+// Gross margin: ~38%, Net margin: ~8-12%
 // All amounts in paise (1 rupee = 100 paise, 1 lakh = 10,000,000 paise)
 const L = 10_000_000 // 1 lakh in paise
 
@@ -38,23 +40,39 @@ const PERIODS = [
   '2024-10-01', '2024-11-01', '2024-12-01', '2025-01-01', '2025-02-01', '2025-03-01',
 ]
 
-// Values in lakhs, will be multiplied by L
+// Values in lakhs — realistic Indian auto components manufacturer
+// Revenue grows from ~₹50L to ~₹65L over the year (~30% annual growth)
+// Gross margin ~38%, Net margin ~10%
 const DEMO_VALUES: Record<string, number[]> = {
-  'Product Sales':       [45.2, 48.1, 49.5, 50.2, 47.8, 52.1, 51.5, 53.2, 55.4, 54.1, 58.2, 60.5],
-  'Service Revenue':     [5.1,  5.2,  5.0,  5.5,  5.8,  6.0,  6.1,  6.2,  6.5,  6.4,  6.8,  7.0 ],
-  'Raw Materials':       [18.5, 19.2, 19.8, 20.1, 19.0, 20.8, 20.5, 21.2, 22.1, 21.6, 23.2, 24.1],
-  'Direct Labour':       [10.0, 10.6, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0],
-  'Salaries & Wages':    [8.5,  8.5,  8.5,  9.2,  9.2,  9.2,  9.2,  9.2,  9.2,  9.8,  9.8,  9.8 ],
-  'Rent':                [2.0,  2.0,  2.0,  2.0,  2.0,  2.0,  2.0,  2.0,  2.0,  2.0,  2.0,  2.0 ],
-  'Utilities':           [1.6,  1.9,  1.5,  1.2,  1.3,  1.3,  1.4,  1.3,  1.8,  1.5,  1.4,  1.5 ],
-  'Marketing':           [1.0,  1.0,  1.5,  1.0,  1.0,  2.0,  1.0,  1.0,  1.5,  1.0,  1.0,  2.5 ],
-  'Cash & Bank':         [15.5, 16.2, 14.8, 15.1, 14.0, 15.8, 15.5, 16.2, 17.1, 16.6, 18.2, 18.5],
-  'Accounts Receivable': [12.0, 13.5, 14.0, 13.8, 12.5, 14.2, 13.9, 14.8, 15.5, 15.0, 16.2, 17.0],
-  'Fixed Assets':        [80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0, 80.0],
-  'Accounts Payable':    [8.0,  8.5,  9.0,  9.2,  8.8,  9.5,  9.3,  9.8,  10.2, 10.0, 10.8, 11.2],
-  'Bank Loan':           [30.0, 30.0, 29.0, 29.0, 28.0, 28.0, 27.0, 27.0, 26.0, 26.0, 25.0, 25.0],
+  // Revenue: steady growth with seasonal dip in Aug (monsoon slowdown)
+  'Product Sales':       [46.5, 49.2, 51.8, 53.4, 50.1, 54.8, 55.2, 57.6, 59.8, 58.4, 62.1, 65.3],
+  'Service Revenue':     [4.2,  4.5,  4.8,  5.0,  4.6,  5.2,  5.4,  5.6,  5.9,  5.8,  6.2,  6.5 ],
+
+  // COGS: ~38% of revenue (raw materials ~22%, labour ~10%, overhead ~6%)
+  'Raw Materials':       [19.2, 20.3, 21.4, 22.1, 20.7, 22.6, 22.8, 23.8, 24.7, 24.1, 25.7, 27.0],
+  'Direct Labour':       [9.3,  9.8,  10.4, 10.7, 10.0, 10.9, 11.0, 11.5, 11.9, 11.6, 12.4, 13.1],
+
+  // OpEx: relatively fixed with some variable components
+  'Salaries & Wages':    [8.5,  8.5,  8.5,  9.5,  9.5,  9.5,  9.5,  9.5,  9.5,  10.5, 10.5, 10.5],
+  'Rent':                [2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2,  2.2 ],
+  'Utilities':           [1.8,  2.1,  1.6,  1.3,  1.4,  1.4,  1.5,  1.4,  1.9,  1.6,  1.5,  1.6 ],
+  'Marketing':           [0.8,  0.8,  1.2,  0.8,  0.8,  1.5,  0.8,  0.8,  1.2,  0.8,  0.8,  2.0 ],
+
+  // Balance sheet — closing balances each month
+  // Cash grows from ₹18L to ₹28L as business becomes more profitable
+  'Cash & Bank':         [18.2, 19.5, 21.1, 22.8, 21.5, 23.9, 24.8, 26.2, 27.8, 27.1, 29.4, 31.2],
+  // AR: ~25 days of revenue
+  'Accounts Receivable': [13.5, 14.2, 15.0, 15.5, 14.6, 15.9, 16.1, 16.8, 17.4, 17.0, 18.2, 19.1],
+  // Fixed assets: stable (no major capex this year)
+  'Fixed Assets':        [85.0, 85.0, 85.0, 85.0, 85.0, 85.0, 85.0, 85.0, 85.0, 85.0, 85.0, 85.0],
+  // AP: ~20 days of COGS
+  'Accounts Payable':    [9.5,  10.1, 10.7, 11.0, 10.4, 11.3, 11.4, 11.9, 12.3, 12.1, 12.9, 13.5],
+  // Loan: being repaid at ₹1L/month
+  'Bank Loan':           [28.0, 27.0, 26.0, 25.0, 24.0, 23.0, 22.0, 21.0, 20.0, 19.0, 18.0, 17.0],
+  // Equity: stable
   'Share Capital':       [50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
-  'Retained Earnings':   [19.5, 20.2, 19.8, 20.1, 19.0, 20.8, 20.5, 21.2, 22.1, 21.6, 23.2, 24.1],
+  // Retained earnings: growing as profits accumulate
+  'Retained Earnings':   [33.4, 35.1, 37.2, 39.1, 38.0, 40.8, 42.4, 44.9, 47.4, 46.7, 50.1, 53.5],
 }
 
 export async function POST(request: NextRequest) {

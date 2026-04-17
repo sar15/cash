@@ -1,172 +1,89 @@
 # CashFlowIQ
 
-Three-way financial forecasting platform for Indian SMEs and Chartered Accountants.
+**Three-way financial forecasting for Indian SMEs and Chartered Accountants.**
 
-Upload your P&L and Balance Sheet → get a 12-month P&L, Balance Sheet, and Cash Flow forecast with automatic GST, TDS, and PF/ESI compliance.
+Upload your P&L and Balance Sheet → get a 12-month forecast with automatic GST, TDS, and PF/ESI compliance.
+
+---
+
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Set up environment
+cp .env.example .env.local
+
+# Initialize database
+npm run db:push
+npm run seed  # Optional: Load demo data
+
+# Start development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Documentation
+
+- **[Getting Started](./GETTING_STARTED.md)** - Setup and first steps
+- **[Features](./FEATURES.md)** - Current and planned features
+- **[Architecture](./ARCHITECTURE.md)** - System design and data flow
+- **[Deployment](./DEPLOYMENT.md)** - Production deployment guide
+- **[Troubleshooting](./TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Backend Plan](./BACKEND_PLAN.md)** - Roadmap and future features
 
 ---
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 (App Router)
-- **Auth**: Clerk
-- **Database**: Turso (libSQL/SQLite)
-- **ORM**: Drizzle
-- **File Storage**: Cloudflare R2
-- **Email**: Resend
-- **Background Jobs**: Inngest
-- **Styling**: Tailwind CSS v4
+- **Framework:** Next.js 16 (App Router, Turbopack)
+- **Auth:** Clerk
+- **Database:** Turso (libSQL/SQLite)
+- **ORM:** Drizzle
+- **Storage:** Cloudflare R2
+- **Email:** Resend
+- **Jobs:** Inngest
+- **Styling:** Tailwind CSS v4
 
 ---
 
-## Local Development
-
-### 1. Clone and install
+## Key Commands
 
 ```bash
-git clone https://github.com/your-org/cashflowiq
-cd cashflowiq
-npm install
-```
-
-### 2. Set up environment variables
-
-```bash
-cp .env.example .env.local
-```
-
-Fill in at minimum:
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` from [clerk.com](https://clerk.com)
-- `TURSO_DATABASE_URL` — leave as `file:local.db` for local dev
-
-### 3. Set up the database
-
-```bash
-# Push schema to local SQLite
-npm run db:push
-
-# (Optional) Seed with demo data
-npm run seed
-```
-
-### 4. Run the dev server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
----
-
-## Production Deployment (Vercel)
-
-### 1. Create a Turso database
-
-```bash
-# Install Turso CLI
-curl -sSfL https://get.tur.so/install.sh | bash
-
-# Create database
-turso db create cashflowiq-prod
-
-# Get connection URL and token
-turso db show cashflowiq-prod --url
-turso db tokens create cashflowiq-prod
-```
-
-### 2. Create a Cloudflare R2 bucket
-
-1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com) → R2
-2. Create bucket: `cashflowiq-uploads`
-3. Create API token with R2 read/write permissions
-4. Note your Account ID, Access Key ID, and Secret Access Key
-
-### 3. Set up Resend (email)
-
-1. Sign up at [resend.com](https://resend.com)
-2. Add and verify your domain
-3. Create an API key
-4. Update `RESEND_FROM_EMAIL` to use your verified domain
-
-### 4. Set up Inngest (background jobs)
-
-1. Sign up at [inngest.com](https://app.inngest.com)
-2. Create an app
-3. Get your Event Key and Signing Key
-4. Add your production URL as a webhook endpoint: `https://your-domain.com/api/inngest`
-
-### 5. Set up Clerk webhooks (welcome emails)
-
-1. Go to Clerk Dashboard → Webhooks
-2. Add endpoint: `https://your-domain.com/api/webhooks/clerk`
-3. Subscribe to `user.created` event
-4. Copy the signing secret to `CLERK_WEBHOOK_SECRET`
-
-### 6. Deploy to Vercel
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel --prod
-```
-
-Add all environment variables from `.env.example` to your Vercel project settings.
-
-### 7. Run migrations in production
-
-After first deploy, run migrations:
-
-```bash
-# Using Vercel CLI
-vercel env pull .env.production
-TURSO_DATABASE_URL=your-prod-url TURSO_AUTH_TOKEN=your-token npm run db:migrate
+npm run dev          # Start dev server
+npm run build        # Production build
+npm run typecheck    # Type checking
+npm run lint         # Lint code
+npm test             # Run tests
+npm run db:studio    # Open database UI
 ```
 
 ---
 
-## Database Commands
+## Core Principles
 
-```bash
-npm run db:push      # Push schema changes to database (dev)
-npm run db:generate  # Generate new migration file
-npm run db:migrate   # Run pending migrations (production)
-npm run db:studio    # Open Drizzle Studio (visual DB browser)
-npm run seed         # Seed database with demo data
-```
+1. **Integer Paise** - All monetary values are integer paise (₹1 = 100 paise)
+2. **Pure Engine** - Forecast engine has no side effects or DB calls
+3. **Period Format** - Months are always `YYYY-MM-01`
+4. **Company Isolation** - Every API route verifies ownership
+5. **Balance Sheet Invariant** - Assets = Liabilities + Equity
 
 ---
 
-## Environment Variables
+## Production Status
 
-See `.env.example` for all required and optional variables with descriptions.
+✅ **Production Ready** (95% complete)
 
-**Required for production:**
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `CLERK_SECRET_KEY`
-- `TURSO_DATABASE_URL`
-- `TURSO_AUTH_TOKEN`
+- ✅ Core forecasting engine
+- ✅ Three-way financial model
+- ✅ Indian compliance (GST, TDS, PF/ESI)
+- ✅ OAuth token encryption
+- ✅ Rate limiting
+- ✅ Error monitoring
+- ✅ Performance optimized
 
-**Optional (features degrade gracefully without them):**
-- `R2_*` — file uploads fall back to local disk in dev
-- `RESEND_API_KEY` — emails silently skipped
-- `INNGEST_*` — background jobs won't run
-- `CLERK_WEBHOOK_SECRET` — welcome emails won't send
-
----
-
-## Architecture
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the complete file map, data flow, and backend roadmap.
-
----
-
-## Key Invariants
-
-1. All monetary values are **integer paise** (₹1 = 100 paise). Never store rupees.
-2. Period format is always **`YYYY-MM-01`**. Month labels (`Apr-25`) are display-only.
-3. The engine is **pure** — no DB calls inside `runForecastEngine()`.
-4. Every API route checks **company ownership** before any DB write.
-5. Balance sheet must balance: `totalAssets === totalLiabilities + totalEquity`.
+See [FEATURES.md](./FEATURES.md) for detailed feature list and roadmap.

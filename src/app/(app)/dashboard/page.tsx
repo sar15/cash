@@ -21,10 +21,13 @@ import { CashFlowWaterfall } from '@/components/dashboard/CashFlowWaterfall'
 function RunwaySummaryBanner({
   runway,
   companyName,
+  cashPosition,
+  monthlyBurn,
 }: {
   runway: number
   cashPosition: number
   companyName: string
+  monthlyBurn: number
 }) {
   const tone = runway >= 6 ? 'green' : runway >= 3 ? 'amber' : 'red'
   const bgColor = tone === 'green' ? 'bg-[#ECFDF5] border-[#A7F3D0]' :
@@ -38,18 +41,34 @@ function RunwaySummaryBanner({
                     tone === 'amber' ? 'text-[#D97706]' :
                     'text-[#DC2626]'
 
+  const runwayText = runway >= 36 ? 'more than 3 years' : `${runway.toFixed(1)} months`
+  const burnText = monthlyBurn > 0 ? ` at ₹${(monthlyBurn / 10_000_000).toFixed(1)}L/month burn` : ''
+
   const message = runway >= 36
-    ? `${companyName} has strong cash reserves — no cash risk in the forecast horizon.`
+    ? `${companyName} has strong cash reserves — no liquidity risk in the forecast horizon.`
     : runway >= 6
-    ? `${companyName} has ${runway.toFixed(1)} months of cash runway at current burn rate.`
+    ? `${companyName} has ${runwayText} of cash runway${burnText}.`
     : runway >= 3
-    ? `${companyName} has ${runway.toFixed(1)} months of runway — monitor cash closely and consider reducing burn.`
-    : `${companyName} has only ${runway.toFixed(1)} months of runway — take action now to extend cash.`
+    ? `${companyName} has ${runwayText} of runway${burnText}. Monitor cash closely.`
+    : `${companyName} has only ${runwayText} of runway. Take action now to extend cash.`
 
   return (
-    <div className={cn('flex items-start gap-3 rounded-md border px-4 py-3', bgColor)}>
+    <div className={cn('flex items-start gap-3 rounded-lg border px-4 py-3', bgColor)}>
       <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', iconColor)} />
-      <p className={cn('text-sm font-medium', textColor)}>{message}</p>
+      <div className="flex-1 min-w-0">
+        <p className={cn('text-sm font-medium', textColor)}>{message}</p>
+        {tone !== 'green' && cashPosition > 0 && (
+          <p className="mt-1 text-xs text-[#64748B]">
+            Current cash: <span className="font-semibold">{formatAuto(cashPosition)}</span>
+            {monthlyBurn > 0 && <> · Monthly burn: <span className="font-semibold">{formatAuto(monthlyBurn)}</span></>}
+          </p>
+        )}
+      </div>
+      {tone !== 'green' && (
+        <Link href="/forecast" className="shrink-0 text-xs font-semibold text-[#2563EB] hover:underline">
+          View forecast →
+        </Link>
+      )}
     </div>
   )
 }
@@ -127,22 +146,19 @@ export default function DashboardPage() {
   const dashboardData = useMemo(() => {
     const baselineMonths = engineResult?.rawIntegrationResults ?? []
     if (baselineMonths.length === 0) {
-      return { cashPosition: 0, runway: 0, netIncome: 0, wcDays: 0 }
+      return { cashPosition: 0, runway: 0, netIncome: 0, wcDays: 0, grossMarginPct: 0, operatingCashFlow: 0, freeCashFlow: 0, monthlyBurn: 0 }
     }
 
     const lastMonth = baselineMonths[baselineMonths.length - 1]
     const cashPosition = lastMonth?.bs?.cash ?? 0
 
-    // Runway = cash / avg monthly cash outflows (operating + financing)
-    // Use total cash outflows, not just negative-OCF months, so profitable
-    // companies still get a meaningful runway figure
+    // Runway = cash / avg monthly cash outflows
     const totalOutflows = baselineMonths.reduce((sum, m) => {
       const opOut = Math.abs(Math.min(0, m?.cf?.operatingCashFlow ?? 0))
       const finOut = Math.abs(Math.min(0, m?.cf?.financingCashFlow ?? 0))
       return sum + opOut + finOut
     }, 0)
     const avgMonthlyBurn = totalOutflows / Math.max(baselineMonths.length, 1)
-    // Fallback: if no outflows detected, estimate from total expenses
     const totalExpenses = baselineMonths.reduce(
       (sum, m) => sum + (m?.pl?.expense ?? 0) + (m?.pl?.cogs ?? 0),
       0
@@ -153,12 +169,24 @@ export default function DashboardPage() {
 
     const netIncome = baselineMonths.reduce((sum, m) => sum + (m?.pl?.netIncome ?? 0), 0)
 
+    // Gross Margin %
+    const totalRevenue = baselineMonths.reduce((sum, m) => sum + (m?.pl?.revenue ?? 0), 0)
+    const totalCogs = baselineMonths.reduce((sum, m) => sum + (m?.pl?.cogs ?? 0), 0)
+    const grossMarginPct = totalRevenue > 0 ? ((totalRevenue - totalCogs) / totalRevenue) * 100 : 0
+
+    // Operating Cash Flow (cumulative)
+    const operatingCashFlow = baselineMonths.reduce((sum, m) => sum + (m?.cf?.operatingCashFlow ?? 0), 0)
+
+    // Free Cash Flow = OCF + Investing CF (CapEx is negative investing)
+    const freeCashFlow = baselineMonths.reduce((sum, m) =>
+      sum + (m?.cf?.operatingCashFlow ?? 0) + (m?.cf?.investingCashFlow ?? 0), 0)
+
     const ar = lastMonth?.bs?.ar ?? 0
     const ap = lastMonth?.bs?.ap ?? 0
     const monthlyRev = baselineMonths[baselineMonths.length - 1]?.pl?.revenue ?? 1
     const wcDays = Math.round(((ar - ap) / (Math.abs(monthlyRev) || 1)) * 30)
 
-    return { cashPosition, runway, netIncome, wcDays }
+    return { cashPosition, runway, netIncome, wcDays, grossMarginPct, operatingCashFlow, freeCashFlow, monthlyBurn: effectiveBurn ?? 0 }
   }, [engineResult])
 
   const complianceItems = useMemo(() => {
@@ -267,6 +295,7 @@ export default function DashboardPage() {
         runway={dashboardData.runway}
         cashPosition={dashboardData.cashPosition}
         companyName={company?.name ?? 'Your company'}
+        monthlyBurn={dashboardData.monthlyBurn}
       />
 
       {/* Cash alert */}
@@ -285,6 +314,9 @@ export default function DashboardPage() {
         runway={dashboardData.runway}
         netIncome={dashboardData.netIncome}
         workingCapitalDays={dashboardData.wcDays}
+        grossMarginPct={dashboardData.grossMarginPct}
+        operatingCashFlow={dashboardData.operatingCashFlow}
+        freeCashFlow={dashboardData.freeCashFlow}
         monthlyCash={(engineResult?.rawIntegrationResults ?? []).map(m => m?.bs?.cash ?? 0)}
         monthlyNetIncome={(engineResult?.rawIntegrationResults ?? []).map(m => m?.pl?.netIncome ?? 0)}
       />
@@ -312,10 +344,12 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Monthly forecast</p>
-              <p className="text-xs text-[#94A3B8]">Next 6 months · {forecastMonths[0]} to {forecastMonths[5]}</p>
+              <p className="text-xs text-[#94A3B8]">
+                Revenue, costs, profit, and cash — next 6 months
+              </p>
             </div>
-            <Link href="/forecast" className="text-xs font-medium text-[#2563EB] hover:underline">
-              Full grid →
+            <Link href="/forecast" className="text-xs font-semibold text-[#2563EB] hover:underline">
+              Full forecast →
             </Link>
           </div>
           <div className="overflow-x-auto">
@@ -323,10 +357,10 @@ export default function DashboardPage() {
               <thead>
                 <tr>
                   <th className="text-left">Month</th>
-                  <th>Revenue</th>
-                  <th>Expenses</th>
-                  <th>Net Income</th>
-                  <th>Cash</th>
+                  <th title="Total income from sales and services">Revenue</th>
+                  <th title="COGS + Operating expenses">Total Costs</th>
+                  <th title="Revenue minus all costs">Net Income</th>
+                  <th title="Projected cash in bank">Cash Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,21 +369,38 @@ export default function DashboardPage() {
                   const exp = (month?.pl?.cogs ?? 0) + (month?.pl?.expense ?? 0)
                   const net = month?.pl?.netIncome ?? 0
                   const cash = month?.bs?.cash ?? 0
+                  const margin = rev > 0 ? (net / rev) * 100 : 0
 
                   return (
                     <tr key={forecastMonths[idx] ?? idx}>
-                      <td className="!font-sans font-medium !text-[#0F172A]">{forecastMonths[idx]}</td>
-                      <td className="text-[#059669]">{formatAuto(rev)}</td>
+                      <td className="!font-sans font-semibold !text-[#0F172A]">{forecastMonths[idx]}</td>
+                      <td className="text-[#2563EB]">{formatAuto(rev)}</td>
                       <td className="text-[#DC2626]">{formatAuto(exp)}</td>
-                      <td className={net < 0 ? 'font-semibold text-[#DC2626]' : 'font-semibold text-[#059669]'}>
-                        {formatAuto(net)}
+                      <td>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className={net < 0 ? 'font-semibold text-[#DC2626]' : 'font-semibold text-[#059669]'}>
+                            {formatAuto(net)}
+                          </span>
+                          {rev > 0 && (
+                            <span className={`text-[10px] font-medium ${margin < 0 ? 'text-[#DC2626]' : 'text-[#94A3B8]'}`}>
+                              {margin.toFixed(0)}%
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="font-semibold text-[#0F172A]">{formatAuto(cash)}</td>
+                      <td className={`font-semibold ${cash < 0 ? 'text-[#DC2626]' : 'text-[#0F172A]'}`}>
+                        {formatAuto(cash)}
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="border-t border-[#F1F5F9] px-4 py-2">
+            <p className="text-[10px] text-[#94A3B8]">
+              Net Income % = profit margin for that month · Cash Balance = projected bank balance
+            </p>
           </div>
         </SurfaceCard>
 
@@ -358,34 +409,46 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between border-b border-[#E2E8F0] px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Upcoming compliance</p>
-              <p className="text-xs text-[#94A3B8]">Statutory payments this month</p>
+              <p className="text-xs text-[#94A3B8]">Statutory payments — GST, TDS, PF/ESI</p>
             </div>
-            <Link href="/compliance" className="text-xs font-medium text-[#2563EB] hover:underline">
-              Calendar →
+            <Link href="/compliance" className="text-xs font-semibold text-[#2563EB] hover:underline">
+              Full calendar →
             </Link>
           </div>
           {complianceItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <p className="text-sm text-[#94A3B8]">No compliance obligations this month.</p>
-              <p className="mt-1 text-xs text-[#CBD5E1]">Configure GST/TDS in Settings.</p>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <p className="text-sm text-[#94A3B8]">No compliance obligations calculated.</p>
+              <p className="mt-1 text-xs text-[#CBD5E1]">Configure GST rate and TDS in Settings.</p>
+              <Link href="/settings" className="mt-3 text-xs font-semibold text-[#2563EB] hover:underline">
+                Go to Settings →
+              </Link>
             </div>
           ) : (
             <div className="divide-y divide-[#F1F5F9]">
-              {complianceItems.map((item) => (
-                <div key={item.label} className="flex items-center justify-between px-4 py-3 hover:bg-[#F8FAFC] transition-colors duration-[80ms]">
-                  <div className="flex items-center gap-3">
-                    <span className={cn(
-                      'health-dot',
-                      item.status === 'upcoming' ? 'health-dot-amber' : 'health-dot-red'
-                    )} />
-                    <div>
-                      <p className="text-sm font-medium text-[#0F172A]">{item.label}</p>
-                      <p className="text-xs text-[#94A3B8]">Due {item.due}</p>
+              {complianceItems.map((item) => {
+                const cashAfter = dashboardData.cashPosition - item.amount
+                const isShortfall = cashAfter < 0
+                return (
+                  <div key={item.label} className="flex items-center justify-between px-4 py-3 hover:bg-[#F8FAFC] transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className={cn(
+                        'health-dot',
+                        isShortfall ? 'health-dot-red' : 'health-dot-amber'
+                      )} />
+                      <div>
+                        <p className="text-sm font-medium text-[#0F172A]">{item.label}</p>
+                        <p className="text-xs text-[#94A3B8]">Due {item.due}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-num text-sm font-semibold text-[#334155]">{formatAuto(item.amount)}</p>
+                      {isShortfall && (
+                        <p className="text-[10px] font-semibold text-[#DC2626]">Cash shortfall</p>
+                      )}
                     </div>
                   </div>
-                  <p className="font-num text-sm font-semibold text-[#334155]">{formatAuto(item.amount)}</p>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </SurfaceCard>

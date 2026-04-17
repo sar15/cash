@@ -38,6 +38,7 @@ interface ForecastConfigState {
   quickMetrics: QuickMetricsConfig | null
   isLoading: boolean
   error: string | null
+  revision: number
 
   // Actions
   load: (companyId: string) => Promise<void>
@@ -125,6 +126,7 @@ export const useForecastConfigStore = create<ForecastConfigState>((set, get) => 
   quickMetrics: null,
   isLoading: false,
   error: null,
+  revision: 0,
 
   load: async (companyId) => {
     if (get().isLoading) return
@@ -138,13 +140,14 @@ export const useForecastConfigStore = create<ForecastConfigState>((set, get) => 
         quickMetricsConfig?: QuickMetricsConfig | null
       }>(`/api/forecast/config?companyId=${companyId}`)
 
-      set({
+      set((s) => ({
         valueRules: normalizeValueRules(config.valueRules),
         timingProfiles: normalizeTimingProfiles(config.timingProfiles),
         complianceConfig: config.complianceConfig ?? DEFAULT_COMPLIANCE,
         quickMetrics: config.quickMetricsConfig ?? config.quickMetrics ?? null,
         isLoading: false,
-      })
+        revision: s.revision + 1,
+      }))
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load config',
@@ -154,54 +157,90 @@ export const useForecastConfigStore = create<ForecastConfigState>((set, get) => 
   },
 
   updateValueRule: async (companyId, accountId, rule) => {
-    const ruleConfig = Object.fromEntries(
-      Object.entries(rule).filter(([key]) => key !== 'type' && key !== 'accountId')
-    )
-    await apiPatch('/api/forecast/config/value-rule', {
-      companyId,
-      accountId,
-      ruleType: rule.type,
-      config: ruleConfig,
-    })
+    // Optimistic update
+    const previousRules = get().valueRules
     set((s) => ({
       valueRules: { ...s.valueRules, [accountId]: rule },
+      revision: s.revision + 1,
     }))
+
+    try {
+      const ruleConfig = Object.fromEntries(
+        Object.entries(rule).filter(([key]) => key !== 'type' && key !== 'accountId')
+      )
+      await apiPatch('/api/forecast/config/value-rule', {
+        companyId,
+        accountId,
+        ruleType: rule.type,
+        config: ruleConfig,
+      })
+    } catch (err) {
+      set({ valueRules: previousRules })
+      throw err
+    }
   },
 
   updateTimingProfile: async (companyId, profileId, config) => {
-    await apiPatch('/api/forecast/config/timing-profile', {
-      companyId,
-      profileId,
-      name: profileId,
-      profileType: config.type,
-      config,
-      autoDerived: false,
-      isDefault: false,
-    })
+    // Optimistic update
+    const previousProfiles = get().timingProfiles
     set((s) => ({
       timingProfiles: { ...s.timingProfiles, [profileId]: config },
+      revision: s.revision + 1,
     }))
+
+    try {
+      await apiPatch('/api/forecast/config/timing-profile', {
+        companyId,
+        profileId,
+        name: profileId,
+        profileType: config.type,
+        config,
+        autoDerived: false,
+        isDefault: false,
+      })
+    } catch (err) {
+      set({ timingProfiles: previousProfiles })
+      throw err
+    }
   },
 
   updateCompliance: async (companyId, config) => {
-    await apiPatch('/api/forecast/config/compliance', {
-      companyId,
-      ...config,
-    })
+    // Optimistic update
+    const previousCompliance = get().complianceConfig
     set((s) => ({
       complianceConfig: s.complianceConfig
         ? { ...s.complianceConfig, ...config }
         : { ...DEFAULT_COMPLIANCE, ...config },
+      revision: s.revision + 1,
     }))
+
+    try {
+      await apiPatch('/api/forecast/config/compliance', {
+        companyId,
+        ...config,
+      })
+    } catch (err) {
+      set({ complianceConfig: previousCompliance })
+      throw err
+    }
   },
 
   updateQuickMetrics: async (companyId, config) => {
-    await apiPatch('/api/forecast/config/metrics', {
-      companyId,
-      ...config,
-    })
+    // Optimistic update
+    const previousMetrics = get().quickMetrics
     set((s) => ({
       quickMetrics: s.quickMetrics ? { ...s.quickMetrics, ...config } : { ...config } as QuickMetricsConfig,
+      revision: s.revision + 1,
     }))
+
+    try {
+      await apiPatch('/api/forecast/config/metrics', {
+        companyId,
+        ...config,
+      })
+    } catch (err) {
+      set({ quickMetrics: previousMetrics })
+      throw err
+    }
   },
 }))

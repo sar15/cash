@@ -76,6 +76,7 @@ interface MicroForecastState {
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
+  revision: number;
 
   loadItems: (companyId: string, force?: boolean) => Promise<void>;
   addRevenue: (inputs: RevenueWizardInputs) => Promise<void>;
@@ -136,6 +137,12 @@ function buildMicroForecast(type: WizardType, id: string, wizardInputs: WizardIn
 }
 
 function buildItemFromRecord(record: ApiMicroForecastRecord): MicroForecastItem {
+  // Guard against missing category field
+  if (!record.category) {
+    console.error('Missing category in micro-forecast record:', record);
+    throw new Error(`Micro-forecast record ${record.id} is missing required category field`);
+  }
+
   const type = normalizeWizardType(record.category);
   const wizardInputs = parseWizardConfig<WizardInputs>(record.wizardConfig);
   const microForecast = buildMicroForecast(type, record.id, wizardInputs);
@@ -218,10 +225,25 @@ function createDraftItem<T extends WizardInputs>(type: WizardType, inputs: T): M
 
 async function persistItem(item: MicroForecastItem, sortOrder: number) {
   const companyId = useCompanyStore.getState().activeCompanyId
-  const result = await apiPost<ApiMicroForecastCreateResponse>('/api/micro-forecasts', {
+  const payload = {
     companyId,
     ...serializeItem(item, sortOrder),
-  });
+  };
+  
+  console.log('[persistItem] Sending payload:', payload);
+  
+  const result = await apiPost<ApiMicroForecastCreateResponse>('/api/micro-forecasts', payload);
+  
+  console.log('[persistItem] Received result:', result);
+  
+  if (!result.forecast) {
+    throw new Error('API response missing forecast object');
+  }
+  
+  if (!result.forecast.category) {
+    console.error('[persistItem] Missing category in response:', result.forecast);
+    throw new Error('API response missing required category field');
+  }
 
   return result.forecast;
 }
@@ -231,6 +253,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
   isLoading: false,
   hasLoaded: false,
   error: null,
+  revision: 0,
 
   loadItems: async (companyId, force = false) => {
     if (get().isLoading || (get().hasLoaded && !force)) {
@@ -247,6 +270,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
         isLoading: false,
         hasLoaded: true,
         error: null,
+        revision: get().revision + 1,
       });
     } catch (error) {
       set({
@@ -263,6 +287,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,
+      revision: state.revision + 1,
     }));
   },
 
@@ -272,6 +297,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,
+      revision: state.revision + 1,
     }));
   },
 
@@ -281,6 +307,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,
+      revision: state.revision + 1,
     }));
   },
 
@@ -290,6 +317,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,
+      revision: state.revision + 1,
     }));
   },
 
@@ -299,6 +327,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,
+      revision: state.revision + 1,
     }));
   },
 
@@ -308,6 +337,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: [...state.items, buildItemFromRecord(saved)],
       hasLoaded: true,
+      revision: state.revision + 1,
     }));
   },
 
@@ -324,6 +354,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set((state) => ({
       items: state.items.map((item) => (item.id === id ? nextItem : item)),
       error: null,
+      revision: state.revision + 1,
     }));
 
     try {
@@ -340,6 +371,7 @@ export const useMicroForecastStore = create<MicroForecastState>((set, get) => ({
     set({
       items: items.filter((item) => item.id !== id),
       error: null,
+      revision: get().revision + 1,
     });
 
     try {

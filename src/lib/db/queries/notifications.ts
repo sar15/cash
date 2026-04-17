@@ -19,16 +19,17 @@ export async function createNotification(input: CreateNotificationInput) {
 }
 
 export async function getNotifications(companyId: string, clerkUserId: string, limit = 20) {
-  // Return notifications for this specific user OR company-wide (null clerkUserId)
-  const all = await db.query.notifications.findMany({
-    where: eq(schema.notifications.companyId, companyId),
+  return db.query.notifications.findMany({
+    where: and(
+      eq(schema.notifications.companyId, companyId),
+      or(
+        isNull(schema.notifications.clerkUserId),
+        eq(schema.notifications.clerkUserId, clerkUserId)
+      )
+    ),
     orderBy: (n, { desc }) => [desc(n.createdAt)],
-    limit: limit * 2, // fetch extra to filter
+    limit,
   })
-  // Show notifications targeted at this user OR broadcast to whole company
-  return all
-    .filter(n => !n.clerkUserId || n.clerkUserId === clerkUserId)
-    .slice(0, limit)
 }
 
 export async function getUnreadCount(companyId: string, clerkUserId: string): Promise<number> {
@@ -46,22 +47,30 @@ export async function getUnreadCount(companyId: string, clerkUserId: string): Pr
   return all.length
 }
 
-export async function markNotificationRead(id: string, companyId: string) {
+export async function markNotificationRead(id: string, companyId: string, clerkUserId: string) {
   await db
     .update(schema.notifications)
     .set({ readAt: new Date().toISOString() })
     .where(and(
       eq(schema.notifications.id, id),
-      eq(schema.notifications.companyId, companyId)
+      eq(schema.notifications.companyId, companyId),
+      or(
+        isNull(schema.notifications.clerkUserId),
+        eq(schema.notifications.clerkUserId, clerkUserId)
+      )
     ))
 }
 
-export async function markAllNotificationsRead(companyId: string) {
+export async function markAllNotificationsRead(companyId: string, clerkUserId: string) {
   await db
     .update(schema.notifications)
     .set({ readAt: new Date().toISOString() })
     .where(and(
       eq(schema.notifications.companyId, companyId),
-      isNull(schema.notifications.readAt)
+      isNull(schema.notifications.readAt),
+      or(
+        isNull(schema.notifications.clerkUserId),
+        eq(schema.notifications.clerkUserId, clerkUserId)
+      )
     ))
 }

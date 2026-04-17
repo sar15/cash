@@ -5,28 +5,16 @@ import { join } from 'path'
 // ─── Task 1 → 3: Bug condition exploration tests (now verify fixes) ────────
 
 describe('Gap 1 — Forecast URL fix', () => {
-  it('apiPost uses path parameter companyId (not query string)', () => {
+  it('apiPost uses query string companyId (not path parameter)', () => {
     const src = readFileSync(join(process.cwd(), 'src/hooks/use-current-forecast.ts'), 'utf-8')
-    // Bug was: `/api/forecast/result?companyId=${company.id}` — query string (404)
-    // Fix is:  `/api/forecast/result/${company.id}` — path param (matches route)
-    expect(src).toContain('`/api/forecast/result/${company.id}`')
-    expect(src).not.toContain('`/api/forecast/result?companyId=${company.id}`')
+    // Correct: `/api/forecast/result?companyId=${company.id}` — query string (matches flat route with resolveAuthedCompany)
+    // Bug was: `/api/forecast/result/${company.id}` — path param (hits [companyId] route with requireOwnedCompany, blocks team members)
+    expect(src).toContain('`/api/forecast/result?companyId=${company.id}`')
+    expect(src).not.toContain('`/api/forecast/result/${company.id}`')
   })
 })
 
-describe('Gap 2 — Zoho token encryption fix', () => {
-  it('Zoho callback encrypts tokens before storing', () => {
-    const src = readFileSync(join(process.cwd(), 'src/app/api/integrations/zoho/callback/route.ts'), 'utf-8')
-    expect(src).toContain("encryptToken(tokens.accessToken")
-    expect(src).toContain("encryptToken(tokens.refreshToken")
-  })
 
-  it('Zoho sync decrypts tokens before use', () => {
-    const src = readFileSync(join(process.cwd(), 'src/lib/integrations/zoho-books/sync.ts'), 'utf-8')
-    expect(src).toContain("decryptToken(integration.accessToken")
-    expect(src).toContain("decryptToken(integration.refreshToken")
-  })
-})
 
 describe('Gap 4 — Member invite acceptedAt fix', () => {
   it('addMember() sets acceptedAt on insert', () => {

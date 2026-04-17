@@ -11,11 +11,7 @@ import {
 } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
-interface RouteContext {
-  params: Promise<{ companyId: string; accountId: string }>
-}
-
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId, accountId } = await context.params
@@ -33,7 +29,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { companyId, accountId } = await context.params

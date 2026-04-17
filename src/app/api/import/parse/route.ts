@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server'
 import { z } from 'zod'
 
-import { getFile } from '@/lib/r2'
+import { getFile } from '@/lib/storage'
 import { handleRouteError, jsonResponse, parseJsonBody, RouteError } from '@/lib/server/api'
 import { requireCompanyForUser, requireUserId } from '@/lib/server/auth'
 import { buildImportPreview } from '@/lib/server/imports'
@@ -22,7 +22,12 @@ export async function POST(request: NextRequest) {
     const body = await parseJsonBody(request, parseRequestSchema)
     const company = await requireCompanyForUser(userId, body.companyId)
 
-    if (!body.fileKey.startsWith(`uploads/${company.id}/`)) {
+    // fileKey is either "uploads/<companyId>/..." (local) or "ut:<utKey>:uploads/<companyId>/..." (uploadthing)
+    const internalKey = body.fileKey.startsWith('ut:')
+      ? body.fileKey.slice(body.fileKey.indexOf(':', 3) + 1)
+      : body.fileKey
+
+    if (!internalKey.startsWith(`uploads/${company.id}/`)) {
       throw new RouteError(403, 'Uploaded file does not belong to the selected company.')
     }
 

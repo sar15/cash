@@ -8,7 +8,7 @@ import { auth } from '@clerk/nextjs/server'
 // GET /api/scenarios/[id] — Get scenario with overrides
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const ctx = await resolveAuthedCompany(request)
@@ -27,7 +27,7 @@ export async function GET(
 // PATCH /api/scenarios/[id] — Update scenario metadata
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const ctx = await resolveAuthedCompany(request)
@@ -50,7 +50,7 @@ export async function PATCH(
 // DELETE /api/scenarios/[id] — Delete a scenario
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const ctx = await resolveAuthedCompany(request)
@@ -67,7 +67,7 @@ export async function DELETE(
 // PUT /api/scenarios/[id] — Save scenario overrides (replace all)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const ctx = await resolveAuthedCompany(request)

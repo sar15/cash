@@ -57,7 +57,7 @@
  *   Green #059669 = good. Red #DC2626 = stop.
  *   Amber #D97706 = attention. Blue #2563EB = interactive.
  *   Everything else is monochrome slate.
- *   4px grid. Subtle shadows. No purple.
+ *   4px grid. Subtle shadows.
  *   Inter for UI. IBM Plex Mono for numbers.
  *   80ms hover transitions. 150ms toggle slides.
  *   Sidebar: 256px expanded, 64px collapsed, 36px nav items.

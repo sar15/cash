@@ -5,11 +5,7 @@ import { updateCompanySchema } from '@/lib/db/validation'
 import { handleRouteError, jsonResponse, noContent, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireAccessibleCompany, requireUserId } from '@/lib/server/auth'
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
-
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
@@ -21,7 +17,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params
@@ -35,7 +31,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: { params: Promise<any> }) {
   try {
     const userId = await requireUserId()
     const { id } = await context.params

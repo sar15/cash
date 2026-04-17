@@ -187,30 +187,76 @@ export function AccountRuleEditor({
     setIsSavingRule(true)
     try {
       let rule: AnyValueRuleConfig
+
       switch (calcMethod) {
         case 'smart_prediction':
           rule = { type: 'rolling_avg', accountId: account.id, lookbackMonths: parseInt(smartLookback) }
           break
-        case 'constant_growing':
-          rule = { type: 'growth', accountId: account.id, monthlyGrowthRate: parseFloat(growthRate) / 100 }
+
+        case 'constant_growing': {
+          const baseRupees = parseFloat(constantValue || '0')
+          const basePaise = Math.round(baseRupees * 100)
+          const monthlyRate = parseFloat(growthRate || '0') / 100
+          // Normalise growth rate to monthly regardless of period selection
+          const effectiveMonthlyRate = growthPeriod === 'yearly'
+            ? Math.pow(1 + monthlyRate, 1 / 12) - 1
+            : growthPeriod === 'quarterly'
+            ? Math.pow(1 + monthlyRate, 1 / 3) - 1
+            : monthlyRate
+
+          if (basePaise > 0 && effectiveMonthlyRate === 0) {
+            // Pure constant — use direct_entry so the grid shows the exact value
+            rule = {
+              type: 'direct_entry',
+              accountId: account.id,
+              entries: Array(12).fill(basePaise),
+            }
+          } else if (basePaise > 0) {
+            // Growing from a base — use direct_entry with compounded values
+            rule = {
+              type: 'direct_entry',
+              accountId: account.id,
+              entries: Array.from({ length: 12 }, (_, i) =>
+                Math.round(basePaise * Math.pow(1 + effectiveMonthlyRate, i))
+              ),
+            }
+          } else {
+            // No base value — fall back to growth rule from historical average
+            rule = { type: 'growth', accountId: account.id, monthlyGrowthRate: effectiveMonthlyRate }
+          }
           break
+        }
+
         case 'same_last_year':
           rule = { type: 'same_last_year', accountId: account.id }
           break
-        case 'link_to_previous':
-          // Map to rolling_avg with lookback 1 (last month)
-          rule = { type: 'rolling_avg', accountId: account.id, lookbackMonths: 1 }
+
+        case 'link_to_previous': {
+          // Use last known value + optional adjustment as direct_entry
+          const adjValue = parseFloat(prevAdjValue || '0')
+          const base = lastValue > 0 ? lastValue : avgHistory
+          const adjusted = prevAdjType === 'pct'
+            ? Math.round(base * (1 + adjValue / 100))
+            : Math.round(base + adjValue * 100)
+          rule = {
+            type: 'direct_entry',
+            accountId: account.id,
+            entries: Array(12).fill(adjusted),
+          }
           break
+        }
+
         default:
           return
       }
+
       await onSaveRule(rule)
       setSavedRule(true)
       setTimeout(() => setSavedRule(false), 2000)
     } finally {
       setIsSavingRule(false)
     }
-  }, [calcMethod, account.id, smartLookback, growthRate, onSaveRule])
+  }, [calcMethod, account.id, smartLookback, growthRate, growthPeriod, constantValue, prevAdjType, prevAdjValue, lastValue, avgHistory, onSaveRule])
 
   const handleSaveTimingProfile = useCallback(async (preset: PaymentTermPreset) => {
     setIsSavingProfile(true)

@@ -1,27 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Building2, Briefcase, ArrowRight, CheckCircle2, TrendingUp, Users, BarChart3, ClipboardCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useProfileStore } from '@/stores/profile-store'
 
-export type UserType = 'sme' | 'ca'
-
-const USER_TYPE_KEY = 'cashflowiq_user_type'
-
-export function getUserType(): UserType | null {
-  if (typeof window === 'undefined') return null
-  return (localStorage.getItem(USER_TYPE_KEY) as UserType) ?? null
-}
-
-export function setUserType(type: UserType) {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(USER_TYPE_KEY, type)
-}
-
-export function clearUserType() {
-  if (typeof window === 'undefined') return
-  localStorage.removeItem(USER_TYPE_KEY)
-}
+export type UserType = 'business_owner' | 'ca_firm'
 
 interface UserTypeModalProps {
   onSelect: (type: UserType) => void
@@ -55,26 +39,26 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* SME Card */}
           <button
-            onClick={() => setSelected('sme')}
+            onClick={() => setSelected('business_owner')}
             className={cn(
               'group relative overflow-hidden rounded-2xl border-2 p-8 text-left transition-all duration-200',
-              selected === 'sme'
+              selected === 'business_owner'
                 ? 'border-[#059669] bg-[#ECFDF5] shadow-lg shadow-emerald-100'
                 : 'border-[#E2E8F0] bg-white hover:border-[#059669]/40 hover:shadow-md'
             )}
           >
-            {selected === 'sme' && (
+            {selected === 'business_owner' && (
               <div className="absolute right-4 top-4">
                 <CheckCircle2 className="h-5 w-5 text-[#059669]" />
               </div>
             )}
             <div className={cn(
               'mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl transition-colors',
-              selected === 'sme' ? 'bg-[#059669] text-white' : 'bg-[#F1F5F9] text-[#64748B] group-hover:bg-[#ECFDF5] group-hover:text-[#059669]'
+              selected === 'business_owner' ? 'bg-[#059669] text-white' : 'bg-[#F1F5F9] text-[#64748B] group-hover:bg-[#ECFDF5] group-hover:text-[#059669]'
             )}>
               <Building2 className="h-7 w-7" />
             </div>
-            <h2 className={cn('text-xl font-semibold', selected === 'sme' ? 'text-[#059669]' : 'text-[#0F172A]')}>
+            <h2 className={cn('text-xl font-semibold', selected === 'business_owner' ? 'text-[#059669]' : 'text-[#0F172A]')}>
               Business Owner
             </h2>
             <p className="mt-1 text-sm font-medium text-[#94A3B8]">SME · Startup · Manufacturer</p>
@@ -89,7 +73,7 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
                 { icon: Users, text: 'Model hires, loans, new clients' },
               ].map((item) => (
                 <li key={item.text} className="flex items-center gap-2.5">
-                  <item.icon className={cn('h-3.5 w-3.5 shrink-0', selected === 'sme' ? 'text-[#059669]' : 'text-[#94A3B8]')} />
+                  <item.icon className={cn('h-3.5 w-3.5 shrink-0', selected === 'business_owner' ? 'text-[#059669]' : 'text-[#94A3B8]')} />
                   <span className="text-xs text-[#475569]">{item.text}</span>
                 </li>
               ))}
@@ -98,26 +82,26 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
 
           {/* CA Card */}
           <button
-            onClick={() => setSelected('ca')}
+            onClick={() => setSelected('ca_firm')}
             className={cn(
               'group relative overflow-hidden rounded-2xl border-2 p-8 text-left transition-all duration-200',
-              selected === 'ca'
+              selected === 'ca_firm'
                 ? 'border-[#2563EB] bg-[#EFF6FF] shadow-lg shadow-blue-100'
                 : 'border-[#E2E8F0] bg-white hover:border-[#2563EB]/40 hover:shadow-md'
             )}
           >
-            {selected === 'ca' && (
+            {selected === 'ca_firm' && (
               <div className="absolute right-4 top-4">
                 <CheckCircle2 className="h-5 w-5 text-[#2563EB]" />
               </div>
             )}
             <div className={cn(
               'mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl transition-colors',
-              selected === 'ca' ? 'bg-[#2563EB] text-white' : 'bg-[#F1F5F9] text-[#64748B] group-hover:bg-[#EFF6FF] group-hover:text-[#2563EB]'
+              selected === 'ca_firm' ? 'bg-[#2563EB] text-white' : 'bg-[#F1F5F9] text-[#64748B] group-hover:bg-[#EFF6FF] group-hover:text-[#2563EB]'
             )}>
               <Briefcase className="h-7 w-7" />
             </div>
-            <h2 className={cn('text-xl font-semibold', selected === 'ca' ? 'text-[#2563EB]' : 'text-[#0F172A]')}>
+            <h2 className={cn('text-xl font-semibold', selected === 'ca_firm' ? 'text-[#2563EB]' : 'text-[#0F172A]')}>
               CA / CFO
             </h2>
             <p className="mt-1 text-sm font-medium text-[#94A3B8]">Chartered Accountant · Finance Professional</p>
@@ -132,7 +116,7 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
                 { icon: TrendingUp, text: 'Consolidated due date tracking' },
               ].map((item) => (
                 <li key={item.text} className="flex items-center gap-2.5">
-                  <item.icon className={cn('h-3.5 w-3.5 shrink-0', selected === 'ca' ? 'text-[#2563EB]' : 'text-[#94A3B8]')} />
+                  <item.icon className={cn('h-3.5 w-3.5 shrink-0', selected === 'ca_firm' ? 'text-[#2563EB]' : 'text-[#94A3B8]')} />
                   <span className="text-xs text-[#475569]">{item.text}</span>
                 </li>
               ))}
@@ -148,7 +132,7 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
             className={cn(
               'w-full inline-flex items-center justify-center gap-2 rounded-xl py-3.5 text-base font-semibold transition-all duration-200',
               selected
-                ? selected === 'sme'
+                ? selected === 'business_owner'
                   ? 'bg-[#059669] text-white hover:bg-[#047857] shadow-lg shadow-emerald-200'
                   : 'bg-[#2563EB] text-white hover:bg-[#1D4ED8] shadow-lg shadow-blue-200'
                 : 'bg-[#F1F5F9] text-[#94A3B8] cursor-not-allowed'
@@ -156,7 +140,7 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
           >
             {selected ? (
               <>
-                Continue as {selected === 'sme' ? 'Business Owner' : 'CA / CFO'}
+                Continue as {selected === 'business_owner' ? 'Business Owner' : 'CA / CFO'}
                 <ArrowRight className="h-5 w-5" />
               </>
             ) : (
@@ -174,12 +158,25 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
 
 /** Hook to get/set user type with localStorage */
 export function useUserType() {
-  const [userType, setType] = useState<UserType | null>(() => getUserType())
+  const profile = useProfileStore((s) => s.profile)
+  const isLoading = useProfileStore((s) => s.isLoading)
+  const load = useProfileStore((s) => s.load)
+  const setUserType = useProfileStore((s) => s.setUserType)
 
-  const selectType = (type: UserType) => {
-    setUserType(type)
-    setType(type)
+  useEffect(() => {
+    if (!profile && !isLoading) {
+      void load()
+    }
+  }, [profile, isLoading, load])
+
+  const selectType = async (type: UserType) => {
+    await setUserType(type)
   }
 
-  return { userType, hasChecked: true, selectType }
+  return {
+    userType: profile?.userType ?? null,
+    // hasChecked = true once we've finished the first load attempt (loading done)
+    hasChecked: !isLoading,
+    selectType,
+  }
 }

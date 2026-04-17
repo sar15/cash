@@ -1,13 +1,17 @@
 'use client'
 
 import React, { useMemo, useState, useCallback, memo } from 'react'
-import { Settings2, TrendingUp, TrendingDown, Minus, Lock, Unlock } from 'lucide-react'
+import { Settings2, TrendingUp, TrendingDown, Minus, Lock, Unlock, Plus, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Account } from '@/stores/accounts-store'
 import type { EngineResult } from '@/lib/engine'
 import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import type { AnyTimingProfileConfig } from '@/lib/engine/timing-profiles/types'
 import type { ViewType } from './ViewSwitcher'
+import { useFormulaStore } from '@/stores/formula-store'
+import { evaluateFormula } from '@/lib/engine/formula-evaluator'
+import { formatAuto } from '@/lib/utils/indian-format'
+import { CustomFormulaBuilder } from './CustomFormulaBuilder'
 
 interface GridRow {
   id: string
@@ -23,7 +27,7 @@ interface ForecastGridProps {
   accounts: Account[]
   forecastMonths: string[]
   engineResult: EngineResult | null
-  actuals?: Record<string, Record<string, number>> // accountId → period → paise
+  actuals?: Record<string, Record<string, number>>
   valueRules?: Record<string, AnyValueRuleConfig>
   timingProfiles?: Record<string, AnyTimingProfileConfig>
   onCellEdit?: (accountId: string, monthIndex: number, value: number) => void
@@ -31,8 +35,10 @@ interface ForecastGridProps {
   fullHeight?: boolean
   compareMode?: boolean
   scenarioResults?: Array<{ id: string; name: string; result: EngineResult | null }> | null
-  lockedPeriods?: string[] // Array of YYYY-MM-01 strings
+  lockedPeriods?: string[]
   onToggleLock?: (period: string) => Promise<void>
+  companyId?: string
+  onCreateFormula?: () => void
 }
 
 function buildPLRows(accounts: Account[], engineResult: EngineResult | null, monthCount: number): GridRow[] {
@@ -60,8 +66,12 @@ function buildPLRows(accounts: Account[], engineResult: EngineResult | null, mon
   const grossProfit = revTotals.map((r, i) => r - cogsTotals[i])
   rows.push({ id: 'gross-profit', name: 'Gross Profit', type: 'total', values: grossProfit, total: grossProfit.reduce((s, v) => s + v, 0) })
   const opexTotals = addSection('Operating Expenses', (a) => a.accountType === 'expense' && !(a.standardMapping?.startsWith('cogs') ?? false), 'Total OpEx')
-  const netIncome = grossProfit.map((g, i) => g - opexTotals[i])
-  rows.push({ id: 'net-income', name: 'Net Income', type: 'total', values: netIncome, total: netIncome.reduce((s, v) => s + v, 0) })
+  const ebitda = grossProfit.map((g, i) => g - opexTotals[i])
+  rows.push({ id: 'ebitda', name: 'EBITDA', type: 'subtotal', values: ebitda, total: ebitda.reduce((s, v) => s + v, 0) })
+  // Depreciation from integration results (if available)
+  const depVals = engineResult?.rawIntegrationResults?.map(m => m?.pl?.depreciation ?? 0) ?? Array(monthCount).fill(0)
+  const netIncome = ebitda.map((e, i) => e - depVals[i])
+  rows.push({ id: 'net-income', name: 'Net Income (PAT)', type: 'total', values: netIncome, total: netIncome.reduce((s, v) => s + v, 0) })
   return rows
 }
 
@@ -94,26 +104,88 @@ function buildBSRows(engineResult: EngineResult | null, monthCount: number): Gri
 function buildCFRows(engineResult: EngineResult | null, monthCount: number): GridRow[] {
   const rows: GridRow[] = []
   const integration = engineResult?.integrationResults ?? []
+  const raw = engineResult?.rawIntegrationResults ?? []
   const emptyValues = () => Array(monthCount).fill(0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extract = (key: string) => integration.map((m: any) => m?.cf?.[key] ?? 0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extractIndirect = (key: string) => integration.map((m: any) => m?.cf?.indirect?.[key] ?? 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractBS = (key: string) => raw.map((m: any) => m?.bs?.[key] ?? 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractPL = (key: string) => raw.map((m: any) => m?.pl?.[key] ?? 0)
 
-  rows.push({ id: 'header-ocf', name: 'Cash Flow from Operations', type: 'header', values: emptyValues(), total: 0 })
-  const ni = extractIndirect('netIncome'); rows.push({ id: 'cf-ni', name: 'Net Income', type: 'account', values: ni, total: ni.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-  const dep = extractIndirect('depreciation'); rows.push({ id: 'cf-dep', name: 'Add: Depreciation', type: 'account', values: dep, total: dep.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-  const ar = extractIndirect('changeInAR'); rows.push({ id: 'cf-ar', name: '(Inc)/Dec in Receivables', type: 'account', values: ar, total: ar.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-  const ap = extractIndirect('changeInAP'); rows.push({ id: 'cf-ap', name: 'Inc/(Dec) in Payables', type: 'account', values: ap, total: ap.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-  const ocf = extract('operatingCashFlow'); rows.push({ id: 'cf-ocf', name: 'Net Cash from Operations', type: 'subtotal', values: ocf, total: ocf.reduce((s: number, v: number) => s + v, 0) })
+  // ── Opening Cash ─────────────────────────────────────────
+  const cashVals = extractBS('cash')
+  const ocfVals = extract('operatingCashFlow')
+  const icfVals = extract('investingCashFlow')
+  const fcfVals = extract('financingCashFlow')
+  const netCFVals = extract('netCashFlow')
 
-  rows.push({ id: 'header-icf', name: 'Cash Flow from Investing', type: 'header', values: emptyValues(), total: 0 })
-  const icf = extract('investingCashFlow'); rows.push({ id: 'cf-icf', name: 'Net Cash from Investing', type: 'subtotal', values: icf, total: icf.reduce((s: number, v: number) => s + v, 0) })
+  // Opening cash = closing cash of prior month (shift by 1)
+  const openingCash = cashVals.map((_, i) => {
+    if (i === 0) return cashVals[0] - netCFVals[0]
+    return cashVals[i - 1]
+  })
 
-  rows.push({ id: 'header-fcf', name: 'Cash Flow from Financing', type: 'header', values: emptyValues(), total: 0 })
-  const fcf = extract('financingCashFlow'); rows.push({ id: 'cf-fcf', name: 'Net Cash from Financing', type: 'subtotal', values: fcf, total: fcf.reduce((s: number, v: number) => s + v, 0) })
+  rows.push({ id: 'cf-opening', name: 'Opening Cash Balance', type: 'subtotal', values: openingCash, total: openingCash[0] ?? 0 })
 
-  const netCF = extract('netCashFlow'); rows.push({ id: 'cf-net', name: 'Net Change in Cash', type: 'total', values: netCF, total: netCF.reduce((s: number, v: number) => s + v, 0) })
+  // ── Operating Activities ─────────────────────────────────
+  rows.push({ id: 'header-ocf', name: 'Operating Activities', type: 'header', values: emptyValues(), total: 0 })
+
+  const ni = extractIndirect('netIncome')
+  rows.push({ id: 'cf-ni', name: 'Net Income', type: 'account', values: ni, total: ni.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  const dep = extractIndirect('depreciation')
+  rows.push({ id: 'cf-dep', name: 'Add: Depreciation & Amortisation', type: 'account', values: dep, total: dep.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  const ar = extractIndirect('changeInAR')
+  rows.push({ id: 'cf-ar', name: '(Increase)/Decrease in Receivables', type: 'account', values: ar, total: ar.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  const ap = extractIndirect('changeInAP')
+  rows.push({ id: 'cf-ap', name: 'Increase/(Decrease) in Payables', type: 'account', values: ap, total: ap.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  rows.push({ id: 'cf-ocf', name: 'Net Cash from Operations', type: 'subtotal', values: ocfVals, total: ocfVals.reduce((s: number, v: number) => s + v, 0) })
+
+  // ── Investing Activities ─────────────────────────────────
+  rows.push({ id: 'header-icf', name: 'Investing Activities', type: 'header', values: emptyValues(), total: 0 })
+
+  // Capital expenditure = negative of investing CF (when negative)
+  const capex = icfVals.map(v => v < 0 ? v : 0)
+  rows.push({ id: 'cf-capex', name: 'Capital Expenditure', type: 'account', values: capex, total: capex.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  rows.push({ id: 'cf-icf', name: 'Net Cash from Investing', type: 'subtotal', values: icfVals, total: icfVals.reduce((s: number, v: number) => s + v, 0) })
+
+  // ── Free Cash Flow (OCF − CapEx) ─────────────────────────
+  const freeCF = ocfVals.map((v, i) => v + icfVals[i])
+  rows.push({ id: 'cf-fcf-derived', name: 'Free Cash Flow (OCF − CapEx)', type: 'total', values: freeCF, total: freeCF.reduce((s: number, v: number) => s + v, 0) })
+
+  // ── Financing Activities ─────────────────────────────────
+  rows.push({ id: 'header-ffcf', name: 'Financing Activities', type: 'header', values: emptyValues(), total: 0 })
+
+  // Debt raised = positive financing CF
+  const debtRaised = fcfVals.map(v => v > 0 ? v : 0)
+  rows.push({ id: 'cf-debt-raised', name: 'Debt Raised', type: 'account', values: debtRaised, total: debtRaised.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  // Debt repaid = negative financing CF
+  const debtRepaid = fcfVals.map(v => v < 0 ? v : 0)
+  rows.push({ id: 'cf-debt-repaid', name: 'Debt Repaid', type: 'account', values: debtRepaid, total: debtRepaid.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
+  rows.push({ id: 'cf-fcf', name: 'Net Cash from Financing', type: 'subtotal', values: fcfVals, total: fcfVals.reduce((s: number, v: number) => s + v, 0) })
+
+  // ── Net Change & Closing ─────────────────────────────────
+  rows.push({ id: 'cf-net', name: 'Net Change in Cash', type: 'total', values: netCFVals, total: netCFVals.reduce((s: number, v: number) => s + v, 0) })
+  rows.push({ id: 'cf-closing', name: 'Closing Cash Balance', type: 'total', values: cashVals, total: cashVals[cashVals.length - 1] ?? 0 })
+
+  // ── Key Ratios ───────────────────────────────────────────
+  // Note: Cash flow ratios are shown in the Drivers view (KPI tab)
+  // Here we just add a summary line for quick reference
+  const grossProfit = extractPL('grossProfit')
+  rows.push({ id: 'header-summary', name: 'Cash Flow Summary', type: 'header', values: emptyValues(), total: 0 })
+  rows.push({ id: 'cf-gross-profit', name: 'Gross Profit (from P&L)', type: 'account', values: grossProfit, total: grossProfit.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+  rows.push({ id: 'cf-ocf-ref', name: 'Operating Cash Flow', type: 'account', values: ocfVals, total: ocfVals.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+  rows.push({ id: 'cf-fcf-ref', name: 'Free Cash Flow', type: 'account', values: freeCF, total: freeCF.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+
   return rows
 }
 
@@ -208,11 +280,20 @@ const DriversView = memo(function DriversView({
   forecastMonths,
   engineResult,
   fullHeight,
+  accounts,
+  companyId,
+  onCreateFormula,
 }: {
   forecastMonths: string[]
   engineResult: EngineResult | null
   fullHeight?: boolean
+  accounts?: Account[]
+  companyId?: string
+  onCreateFormula?: () => void
 }) {
+  const formulas = useFormulaStore(s => s.formulas)
+  const removeFormula = useFormulaStore(s => s.remove)
+  const [editingFormulaId, setEditingFormulaId] = useState<string | null>(null)
   const metrics = useMemo((): DriverMetric[] => {
     if (!engineResult) return []
     const results = engineResult.integrationResults
@@ -388,6 +469,7 @@ const DriversView = memo(function DriversView({
           </tr>
         </thead>
         <tbody>
+          {/* Built-in metrics */}
           {metrics.map(metric => {
             const nonNull = metric.values.filter((v): v is number => v !== null)
             const avg = nonNull.length > 0 ? nonNull.reduce((s, v) => s + v, 0) / nonNull.length : null
@@ -419,17 +501,136 @@ const DriversView = memo(function DriversView({
               </tr>
             )
           })}
+
+          {/* Custom formula KPIs */}
+          {companyId && formulas.filter(f => f.companyId === companyId).length > 0 && (
+            <tr className="bg-[#F8FAFC]">
+              <td colSpan={forecastMonths.length + 2} className="px-4 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#94A3B8]">Custom KPIs</p>
+              </td>
+            </tr>
+          )}
+          {companyId && formulas.filter(f => f.companyId === companyId).map(formula => {
+            if (!engineResult) return null
+            const values = evaluateFormula(formula, engineResult)
+            const nonNull = values.filter((v): v is number => v !== null)
+            const avg = nonNull.length > 0 ? nonNull.reduce((s, v) => s + v, 0) / nonNull.length : null
+
+            const fmtValue = (v: number | null) => {
+              if (v === null) return '—'
+              switch (formula.format) {
+                case 'currency': return formatAuto(v)
+                case 'percent':  return `${v.toFixed(1)}%`
+                case 'days':     return `${Math.round(v)}d`
+                case 'number':   return v.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+              }
+            }
+
+            return (
+              <tr key={formula.id} className="group hover-row">
+                <td className="sticky left-0 z-10 whitespace-nowrap bg-white py-1.5 pl-4 pr-2 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-[#0F172A]">{formula.name}</p>
+                        <span className="rounded bg-[#EFF6FF] px-1 py-0.5 text-[9px] font-bold text-[#2563EB]">Custom</span>
+                      </div>
+                      {formula.description && (
+                        <p className="text-[10px] text-[#94A3B8]">{formula.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={() => setEditingFormulaId(formula.id)}
+                        className="rounded p-1 text-[#94A3B8] hover:text-[#2563EB] transition-colors"
+                        title="Edit formula"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => removeFormula(formula.id)}
+                        className="rounded p-1 text-[#94A3B8] hover:text-[#DC2626] transition-colors"
+                        title="Delete formula"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                </td>
+                {values.map((v, i) => (
+                  <td key={i} className={cn('px-2 py-1.5 tabular-nums', v !== null ? 'text-[#0F172A]' : 'text-[#CBD5E1]')}>
+                    {fmtValue(v)}
+                  </td>
+                ))}
+                <td className="px-3 py-1.5 font-semibold text-[#0F172A] tabular-nums">
+                  {fmtValue(avg)}
+                </td>
+              </tr>
+            )
+          })}
+
+          {/* Add custom KPI row */}
+          {onCreateFormula && (
+            <tr>
+              <td colSpan={forecastMonths.length + 2} className="px-4 py-2">
+                <button
+                  onClick={onCreateFormula}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[#E2E8F0] px-3 py-1.5 text-xs font-medium text-[#94A3B8] transition-colors hover:border-[#2563EB] hover:text-[#2563EB]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create custom KPI formula
+                </button>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
+
+      {/* Edit formula modal */}
+      {editingFormulaId && accounts && companyId && engineResult && (
+        <React.Suspense fallback={null}>
+          <EditFormulaModal
+            formulaId={editingFormulaId}
+            accounts={accounts}
+            engineResult={engineResult}
+            companyId={companyId}
+            onClose={() => setEditingFormulaId(null)}
+          />
+        </React.Suspense>
+      )}
     </div>
   )
 })
+
+// Edit formula modal
+function EditFormulaModal({ formulaId, accounts, engineResult, companyId, onClose }: {
+  formulaId: string
+  accounts: Account[]
+  engineResult: EngineResult
+  companyId: string
+  onClose: () => void
+}) {
+  const formulas = useFormulaStore(s => s.formulas)
+  const formula = formulas.find(f => f.id === formulaId)
+  if (!formula) return null
+
+  return (
+    <CustomFormulaBuilder
+      companyId={companyId}
+      accounts={accounts}
+      engineResult={engineResult}
+      onClose={onClose}
+      editingFormula={formula}
+    />
+  )
+}
 
 export function ForecastGrid({
   view, accounts, forecastMonths, engineResult,
   actuals = {}, valueRules, timingProfiles, onCellEdit, onAccountClick, fullHeight,
   compareMode = false, scenarioResults = null,
   lockedPeriods = [], onToggleLock,
+  companyId, onCreateFormula,
 }: ForecastGridProps) {
   const [editingCell, setEditingCell] = useState<{ row: string; col: number } | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -519,33 +720,41 @@ export function ForecastGrid({
         forecastMonths={forecastMonths}
         engineResult={engineResult}
         fullHeight={fullHeight}
+        accounts={accounts}
+        companyId={companyId}
+        onCreateFormula={onCreateFormula}
       />
     )
   }
 
-  // Comparison mode: show baseline + scenarios side-by-side with deltas
+  // Comparison mode: show a clean summary table — totals per row, delta vs baseline
   if (compareMode && scenarioRowMaps && scenarioRowMaps.length > 0) {
+    const colors = ['#2563EB', '#059669', '#D97706', '#DC2626']
+
     return (
       <div className={cn('overflow-x-auto', fullHeight ? 'h-full' : 'rounded-md border border-[#E2E8F0]')}>
-        <table className="fin-table w-full min-w-[1400px] border-collapse">
+        <table className="fin-table w-full min-w-[600px] border-collapse">
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 bg-white pl-4 pr-2 text-left after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]">Account</th>
-              <th colSpan={monthCount} className="border-r-2 border-[#CBD5E1] px-2 text-center">Baseline</th>
+              <th className="sticky left-0 z-10 bg-white pl-4 pr-2 text-left after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]">
+                Account
+              </th>
+              <th className="border-r border-[#E2E8F0] px-3 text-right">
+                <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#94A3B8]">Baseline</span>
+              </th>
               {scenarioRowMaps.map(({ scenario }, idx) => (
                 <React.Fragment key={scenario.id}>
-                  <th colSpan={monthCount} className="px-2 text-center">{scenario.name}</th>
-                  <th className={cn('px-2', idx < scenarioRowMaps.length - 1 && 'border-r-2 border-[#CBD5E1]')}>Δ Total</th>
-                </React.Fragment>
-              ))}
-            </tr>
-            <tr className="bg-[#F8FAFC]">
-              <th className="sticky left-0 z-10 bg-[#F8FAFC]"></th>
-              {forecastMonths.map(m => <th key={`base-${m}`} className="px-2 text-xs">{m}</th>)}
-              {scenarioRowMaps.map(({ scenario }, idx) => (
-                <React.Fragment key={`${scenario.id}-headers`}>
-                  {forecastMonths.map(m => <th key={`${scenario.id}-${m}`} className="px-2 text-xs">{m}</th>)}
-                  <th className={cn('px-2 text-xs', idx < scenarioRowMaps.length - 1 && 'border-r-2 border-[#CBD5E1]')}>Δ</th>
+                  <th className="px-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <div className="h-2 w-2 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                      <span className="text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: colors[idx % colors.length] }}>
+                        {scenario.name}
+                      </span>
+                    </div>
+                  </th>
+                  <th className={cn('px-3 text-right', idx < scenarioRowMaps.length - 1 && 'border-r border-[#E2E8F0]')}>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#94A3B8]">Δ vs Base</span>
+                  </th>
                 </React.Fragment>
               ))}
             </tr>
@@ -556,11 +765,11 @@ export function ForecastGrid({
                 <tr key={baseRow.id} className={cn(
                   baseRow.type === 'header' && 'bg-[#F8FAFC]',
                   baseRow.type === 'subtotal' && 'bg-[#F8FAFC]',
-                  baseRow.type === 'total' && 'border-t border-[#0F172A] bg-[#F1F5F9]',
+                  baseRow.type === 'total' && 'border-t-2 border-[#0F172A] bg-[#F1F5F9]',
                   baseRow.type === 'account' && 'hover-row'
                 )}>
                   <td className={cn(
-                    'sticky left-0 z-10 whitespace-nowrap py-1.5 pl-4 pr-2',
+                    'sticky left-0 z-10 whitespace-nowrap py-2 pl-4 pr-3',
                     'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]',
                     baseRow.type === 'header' ? 'bg-[#F8FAFC]' :
                     baseRow.type === 'total' ? 'bg-[#F1F5F9]' :
@@ -568,61 +777,64 @@ export function ForecastGrid({
                   )}>
                     <span className={cn(
                       baseRow.type === 'header' && 'label-xs',
-                      baseRow.type === 'subtotal' && 'font-semibold text-[#334155]',
-                      baseRow.type === 'total' && 'font-bold text-[#0F172A]',
-                      baseRow.type === 'account' && 'text-[#334155]'
+                      baseRow.type === 'subtotal' && 'text-sm font-semibold text-[#334155]',
+                      baseRow.type === 'total' && 'text-sm font-bold text-[#0F172A]',
+                      baseRow.type === 'account' && 'text-sm text-[#334155]'
                     )} style={{ paddingLeft: (baseRow.indent ?? 0) * 16 }}>
                       {baseRow.name}
                     </span>
                   </td>
 
-                  {/* Baseline values */}
-                  {baseRow.values.map((value, colIndex) => (
-                    <td key={`base-${colIndex}`} className={cn(
-                      'px-2 py-1.5',
-                      baseRow.type === 'total' && 'font-bold text-[#0F172A]',
-                      baseRow.type === 'subtotal' && 'font-semibold text-[#334155]',
-                      value < 0 && 'text-[#DC2626]',
-                    )}>
-                      {baseRow.type !== 'header' ? formatNum(value) : null}
-                    </td>
-                  ))}
+                  {/* Baseline total */}
+                  <td className={cn(
+                    'border-r border-[#E2E8F0] px-3 py-2 text-right tabular-nums',
+                    baseRow.type === 'total' && 'font-bold text-[#0F172A]',
+                    baseRow.type === 'subtotal' && 'font-semibold text-[#334155]',
+                    baseRow.total < 0 && 'text-[#DC2626]',
+                  )}>
+                    {baseRow.type !== 'header' ? formatNum(baseRow.total) : null}
+                  </td>
 
-                  {/* Scenario values + deltas */}
+                  {/* Scenario totals + deltas */}
                   {scenarioRowMaps.map(({ map }, idx) => {
                     const scenarioRow = map[baseRow.id]
-                    if (!scenarioRow) {
-                      return (
-                        <React.Fragment key={`empty-${idx}`}>
-                          {Array(monthCount).fill(0).map((_, i) => <td key={i} className="px-2 py-1.5 text-[#CBD5E1]">—</td>)}
-                          <td className={cn('px-2 py-1.5 text-[#CBD5E1]', idx < scenarioRowMaps.length - 1 && 'border-r-2 border-[#CBD5E1]')}>—</td>
-                        </React.Fragment>
-                      )
-                    }
-
-                    const totalDelta = scenarioRow.total - baseRow.total
+                    const scenarioTotal = scenarioRow?.total ?? baseRow.total
+                    const delta = scenarioTotal - baseRow.total
+                    const deltaPct = baseRow.total !== 0 ? (delta / Math.abs(baseRow.total)) * 100 : 0
 
                     return (
                       <React.Fragment key={`scenario-${idx}`}>
-                        {scenarioRow.values.map((value, colIndex) => (
-                          <td key={colIndex} className={cn(
-                            'px-2 py-1.5',
-                            baseRow.type === 'total' && 'font-bold text-[#0F172A]',
-                            baseRow.type === 'subtotal' && 'font-semibold text-[#334155]',
-                            value < 0 && 'text-[#DC2626]',
-                          )}>
-                            {baseRow.type !== 'header' ? formatNum(value) : null}
-                          </td>
-                        ))}
                         <td className={cn(
-                          'px-2 py-1.5 font-semibold',
-                          totalDelta > 0 && 'text-[#059669]',
-                          totalDelta < 0 && 'text-[#DC2626]',
-                          totalDelta === 0 && 'text-[#94A3B8]',
-                          idx < scenarioRowMaps.length - 1 && 'border-r-2 border-[#CBD5E1]'
+                          'px-3 py-2 text-right tabular-nums',
+                          baseRow.type === 'total' && 'font-bold text-[#0F172A]',
+                          baseRow.type === 'subtotal' && 'font-semibold text-[#334155]',
+                          scenarioTotal < 0 && 'text-[#DC2626]',
                         )}>
-                          {baseRow.type !== 'header' ? (
-                            totalDelta === 0 ? '—' : formatNum(totalDelta)
+                          {baseRow.type !== 'header' ? formatNum(scenarioTotal) : null}
+                        </td>
+                        <td className={cn(
+                          'px-3 py-2 text-right tabular-nums',
+                          idx < scenarioRowMaps.length - 1 && 'border-r border-[#E2E8F0]'
+                        )}>
+                          {baseRow.type !== 'header' && delta !== 0 ? (
+                            <div className="flex flex-col items-end">
+                              <span className={cn(
+                                'text-xs font-semibold',
+                                delta > 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                              )}>
+                                {delta > 0 ? '+' : ''}{formatNum(delta)}
+                              </span>
+                              {Math.abs(deltaPct) < 1000 && (
+                                <span className={cn(
+                                  'text-[10px]',
+                                  delta > 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                                )}>
+                                  {delta > 0 ? '+' : ''}{deltaPct.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                          ) : baseRow.type !== 'header' ? (
+                            <span className="text-[#CBD5E1]">—</span>
                           ) : null}
                         </td>
                       </React.Fragment>
@@ -747,7 +959,7 @@ export function ForecastGrid({
                     isLocked && 'bg-[#F8FAFC]',
                   )} onClick={() => handleCellClick(row.id, colIndex, value)}>
                     {isEditing ? (
-                      <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
+                      <input type="text" aria-label="Edit cell value" value={editValue} onChange={e => setEditValue(e.target.value)}
                         onBlur={handleCellBlur} onKeyDown={handleKeyDown} autoFocus
                         className="w-20 rounded border border-[#2563EB] bg-white px-1.5 py-0.5 text-right font-num text-sm text-[#0F172A] focus:outline-none" />
                     ) : row.type !== 'header' ? formatNum(value) : null}

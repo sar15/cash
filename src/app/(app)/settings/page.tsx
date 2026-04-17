@@ -20,8 +20,6 @@ import {
   User,
   Users,
   Trash2,
-  Link2,
-  RefreshCw,
   Download,
 } from 'lucide-react'
 import { HeaderBadge, PageHeader, SurfaceCard } from '@/components/shared/page-header'
@@ -77,85 +75,7 @@ function FormField({
 // ============================================================
 // MAIN SETTINGS PAGE
 // ============================================================
-// ZOHO BOOKS INTEGRATION CARD
-// ============================================================
 
-function ZohoIntegrationCard({ companyId }: { companyId: string }) {
-  const [status, setStatus] = useState<{ connected: boolean; syncStatus: string | null; lastSyncedAt: string | null } | null>(null)
-  const [isSyncing, setIsSyncing] = useState(false)
-
-  useEffect(() => {
-    if (!companyId) return
-    fetch(`/api/integrations/zoho/sync?companyId=${companyId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: typeof status) => { if (data) setStatus(data) })
-      .catch(() => {})
-  }, [companyId])
-
-  const handleSync = async () => {
-    if (!companyId) return
-    setIsSyncing(true)
-    try {
-      await fetch(`/api/integrations/zoho/sync?companyId=${companyId}`, { method: 'POST' })
-      setStatus(prev => prev ? { ...prev, syncStatus: 'idle', lastSyncedAt: new Date().toISOString() } : prev)
-    } catch { /* ignore */ } finally {
-      setIsSyncing(false)
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-[#E5E7EB] p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#EFF6FF]">
-            <span className="text-lg font-bold text-[#2563EB]">Z</span>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#0F172A]">Zoho Books</p>
-            <p className="text-xs text-[#64748B]">
-              {status?.connected
-                ? status.lastSyncedAt
-                  ? `Last synced ${new Date(status.lastSyncedAt).toLocaleDateString('en-IN')}`
-                  : 'Connected — never synced'
-                : 'Not connected · 80% of Indian SMEs use Zoho Books'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {status?.connected ? (
-            <>
-              <button
-                onClick={handleSync}
-                disabled={isSyncing || status.syncStatus === 'syncing'}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] transition-colors hover:border-[#CBD5E1] disabled:opacity-50"
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', (isSyncing || status.syncStatus === 'syncing') && 'animate-spin')} />
-                {isSyncing || status.syncStatus === 'syncing' ? 'Syncing...' : 'Sync now'}
-              </button>
-              <span className="inline-flex items-center gap-1 rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-medium text-[#059669]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#059669]" />
-                Connected
-              </span>
-            </>
-          ) : (
-            <a
-              href={companyId ? `/api/integrations/zoho/connect?companyId=${companyId}` : '#'}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0F172A] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#1E293B]"
-            >
-              <Link2 className="h-3.5 w-3.5" />
-              Connect
-            </a>
-          )}
-        </div>
-      </div>
-      {status?.syncStatus === 'error' && (
-        <p className="mt-2 text-xs text-[#DC2626]">Sync error — check your Zoho Books connection</p>
-      )}
-    </div>
-  )
-}
-
-// ============================================================
 
 export default function SettingsPage() {
   const { company, companyId, isLoading } = useCompanyContext()
@@ -286,11 +206,15 @@ export default function SettingsPage() {
         esiApplicable: complianceForm.esiRate > 0,
       })
 
+      // Reload forecast config so the engine picks up the new compliance settings immediately
+      await useForecastConfigStore.getState().load(companyId)
+
       setSaveSuccess(true)
-      showToast('Settings saved successfully', 'success')
+      showToast('Settings saved — forecast will update automatically', 'success')
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
       console.error('[Settings] Save error:', err)
+      showToast('Failed to save settings. Please try again.', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -541,16 +465,13 @@ export default function SettingsPage() {
         </div>
       </SettingsSection>
 
-      {/* Integrations — Zoho Books */}
+      {/* Data Export Center */}
       <SettingsSection
-        title="Integrations"
-        description="Connect your accounting software for automatic daily sync of actuals"
-        icon={Link2}
+        title="Data Exports"
+        description="Download your complete workspace configuration and active models."
+        icon={Database}
       >
-        <ZohoIntegrationCard companyId={companyId ?? ''} />
-
-        {/* Full data export */}
-        <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+        <div className="rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Export All Data</p>
@@ -647,8 +568,8 @@ export default function SettingsPage() {
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {([
-            { id: 'sme' as UserType, label: 'Business Owner', desc: 'SME, startup, or manufacturer managing one company' },
-            { id: 'ca' as UserType, label: 'CA / CFO', desc: 'Managing multiple clients with portfolio-level visibility' },
+            { id: 'business_owner' as UserType, label: 'Business Owner', desc: 'SME, startup, or manufacturer managing one company' },
+            { id: 'ca_firm' as UserType, label: 'CA / CFO', desc: 'Managing multiple clients with portfolio-level visibility' },
           ]).map((opt) => (
             <button key={opt.id} onClick={() => selectType(opt.id)}
               className={cn(

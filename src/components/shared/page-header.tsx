@@ -16,13 +16,13 @@ export function PageHeader({ eyebrow, title, description, badges, actions }: Pag
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#94A3B8]">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="text-xl font-semibold tracking-tight text-[#0F172A]">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
         {description ? (
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#64748B]">{description}</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
         ) : null}
         {badges ? (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{badges}</div>
@@ -42,17 +42,17 @@ interface HeaderBadgeProps {
 }
 
 const badgeStyles = {
-  default: 'border-[#E2E8F0] bg-[#F8FAFC] text-[#475569]',
-  success: 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]',
-  warning: 'border-[#FDE68A] bg-[#FFFBEB] text-[#D97706]',
-  danger:  'border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]',
+  default: 'border-border bg-muted text-muted-foreground',
+  success: 'border-[color:var(--cfiq-green-border)] bg-[color:var(--cfiq-green-bg)] text-[color:var(--cfiq-green)]',
+  warning: 'border-[color:var(--cfiq-amber-border)] bg-[color:var(--cfiq-amber-bg)] text-[color:var(--cfiq-amber)]',
+  danger:  'border-[color:var(--cfiq-red-border)] bg-[color:var(--cfiq-red-bg)] text-[color:var(--cfiq-red)]',
 }
 
 const dotStyles = {
-  default: 'bg-[#94A3B8]',
-  success: 'bg-[#059669]',
-  warning: 'bg-[#D97706]',
-  danger:  'bg-[#DC2626]',
+  default: 'bg-muted-foreground',
+  success: 'bg-[color:var(--cfiq-green)]',
+  warning: 'bg-[color:var(--cfiq-amber)]',
+  danger:  'bg-[color:var(--cfiq-red)]',
 }
 
 export function HeaderBadge({ label, tone = 'default', dot }: HeaderBadgeProps) {
@@ -76,7 +76,7 @@ interface SurfaceCardProps {
 export function SurfaceCard({ children, className, noPad }: SurfaceCardProps) {
   return (
     <div className={cn(
-      'surface rounded-[10px] border border-[#E2E8F0] bg-white',
+      'surface rounded-[10px] border border-border bg-card',
       !noPad && 'p-4',
       className
     )}>
@@ -88,7 +88,7 @@ export function SurfaceCard({ children, className, noPad }: SurfaceCardProps) {
 /** Section label — consistent section headers inside cards */
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#94A3B8]">
+    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
       {children}
     </p>
   )
@@ -96,5 +96,5 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 
 /** Divider */
 export function Divider({ className }: { className?: string }) {
-  return <div className={cn('my-4 h-px bg-[#E2E8F0]', className)} />
+  return <div className={cn('my-4 h-px bg-border', className)} />
 }

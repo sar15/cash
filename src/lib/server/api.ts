@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { type ZodType, z } from 'zod'
+import { type ZodType } from 'zod'
 
 export class RouteError extends Error {
   constructor(
@@ -9,6 +9,26 @@ export class RouteError extends Error {
     super(message)
     this.name = 'RouteError'
   }
+}
+
+/**
+ * Structured JSON logger for API routes.
+ * Usage: logRoute('COMPANIES_GET', request, 200, startTime)
+ */
+export function logRoute(
+  label: string,
+  request: NextRequest,
+  status: number,
+  startMs: number
+) {
+  console.log(JSON.stringify({
+    event: 'route',
+    route: label,
+    method: request.method,
+    status,
+    duration: Date.now() - startMs,
+    ts: new Date().toISOString(),
+  }))
 }
 
 export function jsonResponse<T>(data: T, init?: ResponseInit) {
@@ -53,7 +73,8 @@ export async function parseJsonBody<T>(
 
   const parsed = schema.safeParse(body)
   if (!parsed.success) {
-    const message = z.flattenError(parsed.error).formErrors[0] ?? 'Validation failed.'
+    const flattened = parsed.error.flatten()
+    const message = flattened.formErrors[0] ?? 'Validation failed.'
     throw new RouteError(422, message)
   }
 
