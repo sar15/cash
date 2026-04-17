@@ -244,6 +244,10 @@ export default function DashboardPage() {
   }, [engineResult])
 
   if (companyLoading || !isReady) {
+    // Don't show skeleton to CA users who will be redirected — avoids flash
+    if (hasChecked && userType === 'ca_firm' && !searchParams.get('companyId')) {
+      return null
+    }
     return <DashboardSkeleton />
   }
 
