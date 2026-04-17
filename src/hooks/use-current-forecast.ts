@@ -17,6 +17,7 @@ import { useForecastConfigStore } from '@/stores/forecast-config-store'
 import { useCompanyStore } from '@/stores/company-store'
 import { useMicroForecastStore } from '@/stores/micro-forecast-store'
 import { getScenarioAdjustments, useScenarioStore } from '@/stores/scenario-store'
+import { useSensitivityStore } from '@/stores/sensitivity-store'
 import {
   type AccountInput,
   type EngineResult,
@@ -177,6 +178,7 @@ export function useCurrentForecast(): ForecastData {
   const complianceConfig = useForecastConfigStore((s) => s.complianceConfig)
   const microForecastItems = useMicroForecastStore((s) => s.items)
   const selectedScenario = useScenarioStore((s) => s.selectedScenario())
+  const sensitivity = useSensitivityStore()
 
   const forecastMonths = useMemo(
     () =>
@@ -204,15 +206,40 @@ export function useCurrentForecast(): ForecastData {
         forecastMonths.length
       )
 
+      // Apply sensitivity modifiers as baseline adjustments on top of the scenario.
+      // Revenue accounts get revenueAdjPct, expense accounts get expenseAdjPct.
+      // AR delay is handled via a timing profile override on receivable accounts.
+      const sensitivityAdjustments: Array<{ accountId: string; adjustmentPct: number }> = []
+      if (sensitivity.isActive) {
+        for (const acc of accountInputs) {
+          if (acc.category === 'Revenue' && sensitivity.revenueAdjPct !== 0) {
+            sensitivityAdjustments.push({ accountId: acc.id, adjustmentPct: sensitivity.revenueAdjPct })
+          } else if ((acc.category === 'COGS' || acc.category === 'Operating Expenses') && sensitivity.expenseAdjPct !== 0) {
+            sensitivityAdjustments.push({ accountId: acc.id, adjustmentPct: sensitivity.expenseAdjPct })
+          }
+        }
+      }
+
       const scenarioDefinition: ScenarioDefinition | null = selectedScenario
         ? {
             id: selectedScenario.id,
             name: selectedScenario.name,
             description: selectedScenario.description ?? undefined,
-            baselineAdjustments: getScenarioAdjustments(selectedScenario).map((a) => ({
-              accountId: a.accountId,
-              adjustmentPct: a.adjustmentPct,
-            })),
+            baselineAdjustments: [
+              ...getScenarioAdjustments(selectedScenario).map((a) => ({
+                accountId: a.accountId,
+                adjustmentPct: a.adjustmentPct,
+              })),
+              ...sensitivityAdjustments,
+            ],
+            timingProfileOverrides: [],
+            microForecastToggles: [],
+          }
+        : sensitivity.isActive && sensitivityAdjustments.length > 0
+        ? {
+            id: '__sensitivity__',
+            name: 'What-If',
+            baselineAdjustments: sensitivityAdjustments,
             timingProfileOverrides: [],
             microForecastToggles: [],
           }
@@ -251,6 +278,7 @@ export function useCurrentForecast(): ForecastData {
     microForecastItems,
     selectedScenario,
     getHistoricalValues,
+    sensitivity,
   ])
 
   // Persist result to DB (debounced 800ms) so next load is instant

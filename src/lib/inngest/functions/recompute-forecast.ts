@@ -83,6 +83,20 @@ export const recomputeForecast = inngest.createFunction(
       } catch { /* skip malformed */ }
     }
 
+    // Auto-generate baseline rules for accounts with no configured rule.
+    // This ensures a zero-touch forecast is always available after import —
+    // the user never sees a blank forecast just because they haven't configured rules.
+    for (const acc of accountInputs) {
+      if (valueRulesMap[acc.id]) continue // already has a rule
+      if (['Assets', 'Liabilities', 'Equity'].includes(acc.category)) continue // BS accounts don't need rules
+      const nonZeroHistory = acc.historicalValues.filter(v => v !== 0)
+      if (nonZeroHistory.length === 0) continue // no history to base a forecast on
+      // Use same_last_year if we have 12+ months, otherwise 3-month rolling average
+      valueRulesMap[acc.id] = nonZeroHistory.length >= 12
+        ? { type: 'same_last_year', accountId: acc.id }
+        : { type: 'rolling_avg', accountId: acc.id, lookbackMonths: Math.min(3, nonZeroHistory.length) }
+    }
+
     const timingProfilesMap: Record<string, AnyTimingProfileConfig> = {}
     for (const profile of (timingProfiles as Array<{ profileType: string; config: string; name: string }>)) {
       try {

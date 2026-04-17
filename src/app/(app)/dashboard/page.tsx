@@ -298,6 +298,33 @@ export default function DashboardPage() {
         monthlyBurn={dashboardData.monthlyBurn}
       />
 
+      {/* Projected negative cash alert — shown when any of the next 3 months goes negative */}
+      {(() => {
+        const months = engineResult?.rawIntegrationResults ?? []
+        const next3 = months.slice(0, 3)
+        const firstNegative = next3.findIndex(m => (m?.bs?.cash ?? 0) < 0)
+        if (firstNegative === -1) return null
+        const label = forecastMonths[firstNegative] ?? `Month ${firstNegative + 1}`
+        const balance = next3[firstNegative]?.bs?.cash ?? 0
+        return (
+          <div className="flex items-start gap-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626]" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[#991B1B]">
+                ⚠️ Projected cash balance drops below zero in {label}
+              </p>
+              <p className="mt-1 text-xs text-[#64748B]">
+                Projected balance: <span className="font-semibold text-[#DC2626]">{formatAuto(balance)}</span>
+                {' · '}Take action now to extend runway.
+              </p>
+            </div>
+            <Link href="/forecast" className="shrink-0 text-xs font-semibold text-[#DC2626] hover:underline">
+              View forecast →
+            </Link>
+          </div>
+        )
+      })()}
+
       {/* Cash alert */}
       {dashboardData.cashPosition > 0 && complianceItems.length > 0 && (
         <CashAlertBanner

@@ -5,6 +5,7 @@ import { X, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatAuto } from '@/lib/utils/indian-format'
 import type { EngineResult } from '@/lib/engine'
+import { useSensitivityStore } from '@/stores/sensitivity-store'
 
 export interface SensitivityParams {
   revenueGrowthPct: number
@@ -121,9 +122,26 @@ function ImpactRow({ label, baseline, adjusted, unit = '' }: { label: string; ba
 
 export function SensitivityPanel({ baselineResult, onClose, onRunSensitivity }: SensitivityPanelProps) {
   const [params, setParams] = useState<SensitivityParams>(DEFAULT)
+  const sensitivity = useSensitivityStore()
 
   const hasChanges = params.revenueGrowthPct !== 0 || params.expenseGrowthPct !== 0 ||
     params.collectionDays !== 0 || params.paymentDays !== 0
+
+  // Sync local params to global sensitivity store so the live forecast updates in real-time
+  const updateParam = (key: keyof SensitivityParams, value: number) => {
+    const next = { ...params, [key]: value }
+    setParams(next)
+    sensitivity.set({
+      revenueAdjPct: next.revenueGrowthPct,
+      expenseAdjPct: next.expenseGrowthPct,
+      arDelayDays: next.collectionDays,
+    })
+  }
+
+  const handleReset = () => {
+    setParams(DEFAULT)
+    sensitivity.reset()
+  }
 
   const sensitivityResult = useMemo(() => {
     if (!baselineResult || !hasChanges) return null
@@ -172,7 +190,7 @@ export function SensitivityPanel({ baselineResult, onClose, onRunSensitivity }: 
             unit="%"
             min={-50} max={50} step={5}
             positiveGood={true}
-            onChange={v => setParams(p => ({ ...p, revenueGrowthPct: v }))}
+            onChange={v => updateParam('revenueGrowthPct', v)}
           />
           <NumberStepper
             label="Expense Growth"
@@ -181,7 +199,7 @@ export function SensitivityPanel({ baselineResult, onClose, onRunSensitivity }: 
             unit="%"
             min={-50} max={50} step={5}
             positiveGood={false}
-            onChange={v => setParams(p => ({ ...p, expenseGrowthPct: v }))}
+            onChange={v => updateParam('expenseGrowthPct', v)}
           />
           <NumberStepper
             label="Collection Days (AR)"
@@ -190,7 +208,7 @@ export function SensitivityPanel({ baselineResult, onClose, onRunSensitivity }: 
             unit="d"
             min={-30} max={30} step={5}
             positiveGood={false}
-            onChange={v => setParams(p => ({ ...p, collectionDays: v }))}
+            onChange={v => updateParam('collectionDays', v)}
           />
           <NumberStepper
             label="Payment Days (AP)"
@@ -199,12 +217,12 @@ export function SensitivityPanel({ baselineResult, onClose, onRunSensitivity }: 
             unit="d"
             min={-30} max={30} step={5}
             positiveGood={true}
-            onChange={v => setParams(p => ({ ...p, paymentDays: v }))}
+            onChange={v => updateParam('paymentDays', v)}
           />
 
           {hasChanges && (
             <button
-              onClick={() => setParams(DEFAULT)}
+              onClick={handleReset}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-xs font-medium text-[#64748B] hover:border-[#CBD5E1] hover:text-[#0F172A] transition-colors"
             >
               <RotateCcw className="h-3 w-3" />
