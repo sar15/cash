@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "npx tsx scripts/apply-migrations.ts",
+    "db:check": "npx tsx scripts/check-schema.mts",
     "db:studio": "drizzle-kit studio",
     "seed": "node --loader tsx/esm src/lib/db/seed.ts"
   },
