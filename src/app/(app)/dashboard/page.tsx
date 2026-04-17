@@ -1,14 +1,16 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCompanyContext } from '@/hooks/use-company-context'
 import { useCurrentForecast } from '@/hooks/use-current-forecast'
 import { useScenarioStore } from '@/stores/scenario-store'
 import { useMicroForecastStore } from '@/stores/micro-forecast-store'
 import { useAccountsStore } from '@/stores/accounts-store'
 import { useActualsStore } from '@/stores/actuals-store'
+import { useUserType } from '@/components/shared/UserTypeModal'
 import { cn } from '@/lib/utils'
 import { formatAuto } from '@/lib/utils/indian-format'
 import { apiPost } from '@/lib/api/client'
@@ -121,8 +123,21 @@ function CashAlertBanner({
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { company, isLoading: companyLoading, companyId } = useCompanyContext()
+  const { userType, hasChecked } = useUserType()
   const { engineResult, forecastMonths, isReady, hasAccounts } = useCurrentForecast()
+
+  // CA users without a specific companyId param land on /clients (their portfolio view)
+  // If they have a companyId param they're viewing a specific client — stay on dashboard
+  useEffect(() => {
+    if (!hasChecked) return
+    const hasCompanyParam = searchParams.get('companyId') !== null
+    if (userType === 'ca_firm' && !hasCompanyParam) {
+      router.replace('/clients')
+    }
+  }, [userType, hasChecked, searchParams, router])
   const scenarios = useScenarioStore((state) => state.scenarios)
   const microForecastItems = useMicroForecastStore((state) => state.items)
   const activeEvents = useMemo(() => microForecastItems.filter((item) => item.isActive), [microForecastItems])
