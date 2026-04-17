@@ -15,9 +15,9 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
   const [selected, setSelected] = useState<UserType | null>(null)
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-white p-4">
-      {/* Full-screen takeover — not a modal overlay */}
-      <div className="w-full max-w-3xl">
+    <div className="fixed inset-0 z-[200] flex items-start justify-center bg-white overflow-y-auto">
+      {/* Full-screen takeover — scrollable on mobile */}
+      <div className="w-full max-w-3xl px-4 py-8">
         {/* Logo */}
         <div className="mb-10 flex items-center justify-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#059669]">
@@ -41,7 +41,7 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
           <button
             onClick={() => setSelected('business_owner')}
             className={cn(
-              'group relative overflow-hidden rounded-2xl border-2 p-8 text-left transition-all duration-200',
+              'group relative overflow-hidden rounded-2xl border-2 p-5 sm:p-8 text-left transition-all duration-200',
               selected === 'business_owner'
                 ? 'border-[#059669] bg-[#ECFDF5] shadow-lg shadow-emerald-100'
                 : 'border-[#E2E8F0] bg-white hover:border-[#059669]/40 hover:shadow-md'
@@ -84,7 +84,7 @@ export function UserTypeModal({ onSelect }: UserTypeModalProps) {
           <button
             onClick={() => setSelected('ca_firm')}
             className={cn(
-              'group relative overflow-hidden rounded-2xl border-2 p-8 text-left transition-all duration-200',
+              'group relative overflow-hidden rounded-2xl border-2 p-5 sm:p-8 text-left transition-all duration-200',
               selected === 'ca_firm'
                 ? 'border-[#2563EB] bg-[#EFF6FF] shadow-lg shadow-blue-100'
                 : 'border-[#E2E8F0] bg-white hover:border-[#2563EB]/40 hover:shadow-md'
