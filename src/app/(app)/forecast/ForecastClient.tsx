@@ -203,30 +203,28 @@ export default function ForecastClient() {
     // Limit to 3 scenarios max for performance
     const activeScenarios = scenarios.slice(0, 3)
 
-    // Derive opening balances from historical data
+    // Derive opening balances from historical data — use name matching, not hardcoded IDs
     const deriveOpeningBalances = (accts: Account[], getHist: (id: string) => number[]) => {
       const latestValue = (account: Account) => {
         const values = getHist(account.id)
         return values.length > 0 ? values[values.length - 1] : 0
       }
-      const cashAccount = accts.find((a: Account) => a.id === 'ast-1')
-      const arAccount = accts.find((a: Account) => a.id === 'ast-2')
-      const faAccount = accts.find((a: Account) => a.id === 'ast-3')
-      const depAccount = accts.find((a: Account) => a.id === 'ast-4')
-      const apAccount = accts.find((a: Account) => a.id === 'lia-1')
-      const debtAccount = accts.find((a: Account) => a.id === 'lia-2')
-      const equityAccount = accts.find((a: Account) => a.id === 'equ-1')
-      const reAccount = accts.find((a: Account) => a.id === 'equ-2')
+      const matches = (a: Account, tokens: string[]) => {
+        const hay = `${a.name} ${a.standardMapping ?? ''}`.toLowerCase()
+        return tokens.some(t => hay.includes(t))
+      }
+      const sum = (pred: (a: Account) => boolean) =>
+        accts.filter(pred).reduce((s, a) => s + latestValue(a), 0)
 
       return {
-        cash: cashAccount ? latestValue(cashAccount) : 0,
-        ar: arAccount ? latestValue(arAccount) : 0,
-        fixedAssets: faAccount ? latestValue(faAccount) : 0,
-        accDepreciation: depAccount ? latestValue(depAccount) : 0,
-        ap: apAccount ? latestValue(apAccount) : 0,
-        debt: debtAccount ? latestValue(debtAccount) : 0,
-        equity: equityAccount ? latestValue(equityAccount) : 0,
-        retainedEarnings: reAccount ? latestValue(reAccount) : 0,
+        cash: sum(a => a.accountType === 'asset' && matches(a, ['cash', 'bank'])),
+        ar: sum(a => a.accountType === 'asset' && matches(a, ['receivable', 'debtor'])),
+        fixedAssets: sum(a => a.accountType === 'asset' && matches(a, ['fixed', 'property', 'plant', 'equipment', 'machine', 'vehicle'])),
+        accDepreciation: Math.abs(sum(a => a.accountType === 'asset' && matches(a, ['depreciation', 'acc dep']))),
+        ap: sum(a => a.accountType === 'liability' && matches(a, ['payable', 'creditor'])),
+        debt: sum(a => a.accountType === 'liability' && matches(a, ['loan', 'debt', 'borrowing', 'od', 'cc'])),
+        equity: sum(a => a.accountType === 'equity' && matches(a, ['capital', 'share'])),
+        retainedEarnings: sum(a => a.accountType === 'equity') - sum(a => a.accountType === 'equity' && matches(a, ['capital', 'share'])),
       }
     }
 

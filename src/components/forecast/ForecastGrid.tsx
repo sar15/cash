@@ -48,7 +48,8 @@ function buildPLRows(accounts: Account[], engineResult: EngineResult | null, mon
 
   const addSection = (headerName: string, accountFilter: (a: Account) => boolean, subtotalName?: string) => {
     rows.push({ id: `header-${headerName}`, name: headerName, type: 'header', values: emptyValues(), total: 0 })
-    const sectionAccounts = accounts.filter(accountFilter).sort((a, b) => a.sortOrder - b.sortOrder)
+    // Only include leaf accounts (isGroup=false) to prevent double-counting parent totals
+    const sectionAccounts = accounts.filter(a => accountFilter(a) && !a.isGroup).sort((a, b) => a.sortOrder - b.sortOrder)
     const sectionTotals = emptyValues()
     sectionAccounts.forEach((acc) => {
       const values = forecasts[acc.id] ?? emptyValues()
