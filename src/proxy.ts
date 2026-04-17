@@ -11,7 +11,8 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhooks(.*)',
   '/api/inngest(.*)', // Inngest server-to-server — verified by Inngest signing key, not Clerk
   '/api/import/template', // Public blank CSV template — no company data
-  '/manifest.webmanifest', // PWA manifest — must be public
+  '/manifest.webmanifest(.*)', // PWA manifest — must be public
+  '/manifest.json(.*)',
 ])
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
@@ -40,8 +41,8 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
       ].join('; ')
     : [
         "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://clerk.cashflowiq.in https://*.clerk.accounts.dev https://challenges.cloudflare.com`,
-        `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`,
+        `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://clerk.cashflowiq.in https://*.clerk.accounts.dev https://challenges.cloudflare.com`,
+        `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data: blob: https://img.clerk.com",
         "connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io wss://*.clerk.accounts.dev",
