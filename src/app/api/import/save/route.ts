@@ -91,6 +91,7 @@ function normalizePeriod(value: string) {
 }
 
 export async function POST(request: NextRequest) {
+  let idempotencyCtx: { key: string; companyId: string; route: string; method: string } | null = null
   try {
     const userId = await requireUserId()
     const body = await parseJsonBody(request, importSaveRequestSchema)
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
     // - 'in_progress' → concurrent replay, return 409
     // - 'proceed'    → we own the slot, continue processing
     const idempotencyKey = getIdempotencyKey(request)
-    const idempotencyCtx = idempotencyKey
+    idempotencyCtx = idempotencyKey
       ? { key: idempotencyKey, companyId: company.id, route: '/api/import/save', method: 'POST' }
       : null
 
@@ -305,6 +306,20 @@ export async function POST(request: NextRequest) {
 
     return jsonResponse(responseBody)
   } catch (error) {
+    // If we reserved an idempotency slot but the request failed, delete it so
+    // the user can retry without hitting the "duplicate in progress" wall.
+    if (idempotencyCtx) {
+      db.delete(schema.idempotencyKeys)
+        .where(
+          and(
+            eq(schema.idempotencyKeys.companyId, idempotencyCtx.companyId),
+            eq(schema.idempotencyKeys.key, idempotencyCtx.key),
+            eq(schema.idempotencyKeys.route, idempotencyCtx.route),
+            eq(schema.idempotencyKeys.method, idempotencyCtx.method)
+          )
+        )
+        .catch(() => {})
+    }
     return handleRouteError('IMPORT_SAVE_POST', error)
   }
 }
