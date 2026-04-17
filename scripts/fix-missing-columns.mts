@@ -1,4 +1,4 @@
-import { createClient } from '@libsql/client'
+import { createClient, type Row } from '@libsql/client'
 import * as dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
@@ -20,20 +20,22 @@ const fixes = [
   },
 ]
 
+function hasColumn(rows: Row[], columnName: string): boolean {
+  return rows.some((r) => String(r['name'] ?? '') === columnName)
+}
+
 for (const fix of fixes) {
   const info = await client.execute(`PRAGMA table_info(${fix.table})`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const exists = info.rows.some((r: any) => r.name === fix.check)
-  if (exists) {
+  if (hasColumn(info.rows, fix.check)) {
     console.log(`✓ ${fix.table}.${fix.check} already exists`)
     continue
   }
   try {
     await client.execute(fix.sql)
     console.log(`✅ Added ${fix.table}.${fix.check}`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    console.error(`✗ Failed: ${err.message}`)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`✗ Failed: ${message}`)
   }
 }
 

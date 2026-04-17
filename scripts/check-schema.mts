@@ -1,4 +1,4 @@
-import { createClient } from '@libsql/client'
+import { createClient, type Row } from '@libsql/client'
 import * as dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
@@ -7,15 +7,19 @@ const client = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
 
+function getColumnName(row: Row): string {
+  return String(row['name'] ?? '')
+}
+
 const companies = await client.execute('PRAGMA table_info(companies)')
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-console.log('companies columns:', companies.rows.map((r: any) => r.name))
+console.log('companies columns:', companies.rows.map(getColumnName))
 
 const forecast = await client.execute('PRAGMA table_info(forecast_results)')
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-console.log('forecast_results columns:', forecast.rows.map((r: any) => r.name))
+console.log('forecast_results columns:', forecast.rows.map(getColumnName))
 
-const taxHistory = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tax_rate_history'")
+const taxHistory = await client.execute(
+  "SELECT name FROM sqlite_master WHERE type='table' AND name='tax_rate_history'"
+)
 console.log('tax_rate_history exists:', taxHistory.rows.length > 0)
 
 client.close()
