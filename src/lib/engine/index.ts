@@ -158,6 +158,7 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
       const context = {
         historicalValues: account.historicalValues,
         forecastMonths: forecastLength,
+        forecastMonthLabels,
       }
 
       let forecast: number[]

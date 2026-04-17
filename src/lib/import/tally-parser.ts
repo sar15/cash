@@ -135,14 +135,20 @@ function extractLedgersFromMessage(message: TallyMessage): TallyLedger[] {
     if (monthlyEntries.length > 0) {
       for (const entry of monthlyEntries) {
         const period = parseTallyDate(entry.MONTHSTARTDATE)
-        if (!period) continue
+        if (!period) {
+          // Log the bad date so the user knows which ledger to fix in Tally
+          console.warn(
+            `[TallyParser] Ledger "${name}": skipped entry with invalid date "${entry.MONTHSTARTDATE}". ` +
+            `Expected format: YYYYMMDD (e.g. 20240401 for April 2024).`
+          )
+          continue
+        }
         const closingBalance = parseTallyBalance(entry.CLOSINGBALANCE)
         ledgers.push({ name, parent, closingBalance, period })
       }
-    } else {
-      // Single closing balance — we don't know the period, skip
-      // (these are summary exports without monthly breakdown)
     }
+    // Single closing balance without monthly breakdown — skip silently
+    // (summary exports don't have per-month data)
   }
 
   return ledgers
@@ -242,7 +248,16 @@ export async function parseTallyXml(buffer: ArrayBuffer): Promise<ParsedSheet[]>
   try {
     parsed = parser.parse(text) as TallyEnvelope
   } catch (err) {
-    throw new Error(`Failed to parse Tally XML: ${err instanceof Error ? err.message : String(err)}`)
+    // Give the user actionable context instead of a generic 500
+    const msg = err instanceof Error ? err.message : String(err)
+    // fast-xml-parser includes line info in some errors — extract it if present
+    const lineMatch = msg.match(/line[:\s]+(\d+)/i)
+    const lineHint = lineMatch ? ` (near line ${lineMatch[1]})` : ''
+    throw new Error(
+      `Tally XML is malformed${lineHint}. This can happen with pirated or older Tally versions. ` +
+      `Try re-exporting from Tally: Gateway of Tally → Display → Account Books → Ledger → Export. ` +
+      `Parser detail: ${msg}`
+    )
   }
 
   const envelope = parsed?.ENVELOPE

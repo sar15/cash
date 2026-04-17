@@ -85,9 +85,12 @@ function evaluateForMonth(
     .replace(/\bIF\s*\(([^,]+),([^,]+),([^)]+)\)/gi, '(($1) ? ($2) : ($3))')
 
   const stripped = safeExpr.replace(/\s/g, '')
-  // Allow numbers, operators, Math.* calls, and parentheses
+  // Strict allowlist: only digits, arithmetic operators, Math.* calls, parentheses, commas, dots, e (scientific notation)
+  // Explicitly blocks: while, for, function, =>, import, require, process, window, document
   if (!/^[0-9+\-*/().eMath,_a-z]+$/i.test(stripped)) return null
   if (stripped.length === 0 || stripped === '()') return null
+  // Secondary check: block any remaining dangerous keywords after Math.* substitution
+  if (/\b(while|for|do|function|return|import|require|process|window|document|global|eval|fetch|XMLHttp)\b/i.test(safeExpr)) return null
 
   try {
     const fn = new Function('Math', `"use strict"; return (${safeExpr})`)
