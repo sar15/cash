@@ -8,9 +8,11 @@ const client = createClient({
 })
 
 const companies = await client.execute('PRAGMA table_info(companies)')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 console.log('companies columns:', companies.rows.map((r: any) => r.name))
 
 const forecast = await client.execute('PRAGMA table_info(forecast_results)')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 console.log('forecast_results columns:', forecast.rows.map((r: any) => r.name))
 
 const taxHistory = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tax_rate_history'")

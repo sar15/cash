@@ -22,6 +22,7 @@ const fixes = [
 
 for (const fix of fixes) {
   const info = await client.execute(`PRAGMA table_info(${fix.table})`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const exists = info.rows.some((r: any) => r.name === fix.check)
   if (exists) {
     console.log(`✓ ${fix.table}.${fix.check} already exists`)
@@ -30,6 +31,7 @@ for (const fix of fixes) {
   try {
     await client.execute(fix.sql)
     console.log(`✅ Added ${fix.table}.${fix.check}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`✗ Failed: ${err.message}`)
   }
