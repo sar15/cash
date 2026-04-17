@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useMemo, useState, useCallback, memo } from 'react'
+import React, { useMemo, useState, useCallback, memo, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Settings2, TrendingUp, TrendingDown, Minus, Lock, Unlock, Plus, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Account } from '@/stores/accounts-store'
@@ -852,10 +853,33 @@ export function ForecastGrid({
 
   const rows = baselineRows
 
+  // ── Virtualized main table ────────────────────────────────────────────────
+  // Virtualizes the row loop so only visible rows are in the DOM.
+  // Fixes the "4GB RAM Lenovo freeze" for large COAs (500+ accounts × 36 months).
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const ROW_HEIGHT = 36 // px — matches py-1.5 + font-size
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10, // render 10 extra rows above/below viewport
+  })
+
+  const virtualRows = virtualizer.getVirtualItems()
+  const totalHeight = virtualizer.getTotalSize()
+  const paddingTop = virtualRows.length > 0 ? (virtualRows[0]?.start ?? 0) : 0
+  const paddingBottom = virtualRows.length > 0
+    ? totalHeight - (virtualRows[virtualRows.length - 1]?.end ?? 0)
+    : 0
+
   return (
-    <div className={cn('overflow-x-auto', fullHeight ? 'h-full' : 'rounded-md border border-[#E2E8F0]')}>
+    <div
+      ref={scrollRef}
+      className={cn('overflow-auto', fullHeight ? 'h-full' : 'max-h-[600px] rounded-md border border-[#E2E8F0]')}
+    >
       <table className="fin-table w-full min-w-[800px] border-collapse">
-        <thead>
+        <thead className="sticky top-0 z-20 bg-white">
           <tr>
             <th className="sticky left-0 z-10 bg-white pl-4 pr-2 text-left after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]">Account</th>
             {forecastMonths.map((month, monthIdx) => {
@@ -891,95 +915,118 @@ export function ForecastGrid({
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => (
-            <tr key={row.id} className={cn(
-              row.type === 'header' && 'bg-[#F8FAFC]',
-              row.type === 'subtotal' && 'bg-[#F8FAFC]',
-              row.type === 'total' && 'border-t border-[#0F172A] bg-[#F1F5F9]',
-              row.type === 'account' && 'hover-row'
-            )}>
-              <td className={cn(
-                'sticky left-0 z-10 whitespace-nowrap py-1.5 pl-4 pr-2',
-                'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]',
-                row.type === 'header' ? 'bg-[#F8FAFC]' :
-                row.type === 'total' ? 'bg-[#F1F5F9]' :
-                row.type === 'subtotal' ? 'bg-[#F8FAFC]' : 'bg-white',
-              )}>
-                {row.type === 'account' && view === 'pl' ? (
-                  <div className="flex items-center gap-1.5 group/name" style={{ paddingLeft: (row.indent ?? 0) * 16 }}>
-                    <span className="text-[#334155]">{row.name}</span>
-                    {valueRules?.[row.id] && (() => {
-                      const badge = ruleTypeBadge[valueRules[row.id].type]
-                      return badge ? (
-                        <span className={cn('rounded border px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]', badge.color)}>
-                          {badge.label}
-                        </span>
-                      ) : null
-                    })()}
-                    {timingProfiles?.[row.id] && (
-                      <span className="rounded border border-[#BFDBFE] bg-[#EFF6FF] px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#2563EB]">
-                        {timingProfiles[row.id].month_0 === 1 ? 'Imm' : `${Math.round((timingProfiles[row.id].month_0 ?? 0) * 100)}d`}
-                      </span>
-                    )}
-                    {onAccountClick && (
-                      <button
-                        onClick={e => { e.stopPropagation(); onAccountClick(row.id) }}
-                        className="ml-auto opacity-0 group-hover/name:opacity-100 rounded p-0.5 text-[#94A3B8] hover:text-[#475569] transition-opacity"
-                        title="Configure forecast method"
-                      >
-                        <Settings2 className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <span className={cn(
-                    row.type === 'header' && 'label-xs',
-                    row.type === 'subtotal' && 'font-semibold text-[#334155]',
-                    row.type === 'total' && 'font-bold text-[#0F172A]',
-                    row.type === 'account' && 'text-[#334155]'
-                  )} style={{ paddingLeft: (row.indent ?? 0) * 16 }}>
-                    {row.name}
-                  </span>
-                )}
-              </td>
-
-              {row.values.map((value, colIndex) => {
-                const isEditing = editingCell?.row === row.id && editingCell?.col === colIndex
-                const isVariance = view === 'variance'
-                const isLocked = lockedSet.has(periodKeys[colIndex])
-                return (
-                  <td key={colIndex} className={cn(
-                    'px-2 py-1.5',
-                    row.type === 'account' && view === 'pl' && 'cursor-pointer',
-                    row.type === 'total' && 'font-bold text-[#0F172A]',
-                    row.type === 'subtotal' && 'font-semibold text-[#334155]',
-                    !isVariance && value < 0 && 'text-[#DC2626]',
-                    isVariance && value > 0 && 'text-[#059669]',
-                    isVariance && value < 0 && 'text-[#DC2626]',
-                    isVariance && value === 0 && 'text-[#CBD5E1]',
-                    isLocked && 'bg-[#F8FAFC]',
-                  )} onClick={() => handleCellClick(row.id, colIndex, value)}>
-                    {isEditing ? (
-                      <input type="text" aria-label="Edit cell value" value={editValue} onChange={e => setEditValue(e.target.value)}
-                        onBlur={handleCellBlur} onKeyDown={handleKeyDown} autoFocus
-                        className="w-20 rounded border border-[#2563EB] bg-white px-1.5 py-0.5 text-right font-num text-sm text-[#0F172A] focus:outline-none" />
-                    ) : row.type !== 'header' ? formatNum(value) : null}
-                  </td>
-                )
-              })}
-
-              <td className={cn(
-                'px-3 py-1.5',
-                row.type === 'total' && 'font-bold text-[#0F172A]',
-                row.type === 'subtotal' && 'font-semibold text-[#334155]',
-                view !== 'variance' && row.total < 0 && 'text-[#DC2626]',
-                view === 'variance' && row.total > 0 && 'text-[#059669]',
-                view === 'variance' && row.total < 0 && 'text-[#DC2626]',
-              )}>
-                {row.type !== 'header' ? formatNum(row.total) : null}
-              </td>
+          {/* Top spacer — keeps scroll position correct for off-screen rows above */}
+          {paddingTop > 0 && (
+            <tr style={{ height: paddingTop }}>
+              <td colSpan={forecastMonths.length + 2} />
             </tr>
-          ))}
+          )}
+
+          {virtualRows.map(virtualRow => {
+            const row = rows[virtualRow.index]
+            if (!row) return null
+            return (
+              <tr
+                key={row.id}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                className={cn(
+                  row.type === 'header' && 'bg-[#F8FAFC]',
+                  row.type === 'subtotal' && 'bg-[#F8FAFC]',
+                  row.type === 'total' && 'border-t border-[#0F172A] bg-[#F1F5F9]',
+                  row.type === 'account' && 'hover-row'
+                )}
+              >
+                <td className={cn(
+                  'sticky left-0 z-10 whitespace-nowrap py-1.5 pl-4 pr-2',
+                  'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-[#E2E8F0]',
+                  row.type === 'header' ? 'bg-[#F8FAFC]' :
+                  row.type === 'total' ? 'bg-[#F1F5F9]' :
+                  row.type === 'subtotal' ? 'bg-[#F8FAFC]' : 'bg-white',
+                )}>
+                  {row.type === 'account' && view === 'pl' ? (
+                    <div className="flex items-center gap-1.5 group/name" style={{ paddingLeft: (row.indent ?? 0) * 16 }}>
+                      <span className="text-[#334155]">{row.name}</span>
+                      {valueRules?.[row.id] && (() => {
+                        const badge = ruleTypeBadge[valueRules[row.id].type]
+                        return badge ? (
+                          <span className={cn('rounded border px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]', badge.color)}>
+                            {badge.label}
+                          </span>
+                        ) : null
+                      })()}
+                      {timingProfiles?.[row.id] && (
+                        <span className="rounded border border-[#BFDBFE] bg-[#EFF6FF] px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-[#2563EB]">
+                          {timingProfiles[row.id].month_0 === 1 ? 'Imm' : `${Math.round((timingProfiles[row.id].month_0 ?? 0) * 100)}d`}
+                        </span>
+                      )}
+                      {onAccountClick && (
+                        <button
+                          onClick={e => { e.stopPropagation(); onAccountClick(row.id) }}
+                          className="ml-auto opacity-0 group-hover/name:opacity-100 rounded p-0.5 text-[#94A3B8] hover:text-[#475569] transition-opacity"
+                          title="Configure forecast method"
+                        >
+                          <Settings2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <span className={cn(
+                      row.type === 'header' && 'label-xs',
+                      row.type === 'subtotal' && 'font-semibold text-[#334155]',
+                      row.type === 'total' && 'font-bold text-[#0F172A]',
+                      row.type === 'account' && 'text-[#334155]'
+                    )} style={{ paddingLeft: (row.indent ?? 0) * 16 }}>
+                      {row.name}
+                    </span>
+                  )}
+                </td>
+
+                {row.values.map((value, colIndex) => {
+                  const isEditing = editingCell?.row === row.id && editingCell?.col === colIndex
+                  const isVariance = view === 'variance'
+                  const isLocked = lockedSet.has(periodKeys[colIndex])
+                  return (
+                    <td key={colIndex} className={cn(
+                      'px-2 py-1.5',
+                      row.type === 'account' && view === 'pl' && 'cursor-pointer',
+                      row.type === 'total' && 'font-bold text-[#0F172A]',
+                      row.type === 'subtotal' && 'font-semibold text-[#334155]',
+                      !isVariance && value < 0 && 'text-[#DC2626]',
+                      isVariance && value > 0 && 'text-[#059669]',
+                      isVariance && value < 0 && 'text-[#DC2626]',
+                      isVariance && value === 0 && 'text-[#CBD5E1]',
+                      isLocked && 'bg-[#F8FAFC]',
+                    )} onClick={() => handleCellClick(row.id, colIndex, value)}>
+                      {isEditing ? (
+                        <input type="text" aria-label="Edit cell value" value={editValue} onChange={e => setEditValue(e.target.value)}
+                          onBlur={handleCellBlur} onKeyDown={handleKeyDown} autoFocus
+                          className="w-20 rounded border border-[#2563EB] bg-white px-1.5 py-0.5 text-right font-num text-sm text-[#0F172A] focus:outline-none" />
+                      ) : row.type !== 'header' ? formatNum(value) : null}
+                    </td>
+                  )
+                })}
+
+                <td className={cn(
+                  'px-3 py-1.5',
+                  row.type === 'total' && 'font-bold text-[#0F172A]',
+                  row.type === 'subtotal' && 'font-semibold text-[#334155]',
+                  view !== 'variance' && row.total < 0 && 'text-[#DC2626]',
+                  view === 'variance' && row.total > 0 && 'text-[#059669]',
+                  view === 'variance' && row.total < 0 && 'text-[#DC2626]',
+                )}>
+                  {row.type !== 'header' ? formatNum(row.total) : null}
+                </td>
+              </tr>
+            )
+          })}
+
+          {/* Bottom spacer — keeps scroll position correct for off-screen rows below */}
+          {paddingBottom > 0 && (
+            <tr style={{ height: paddingBottom }}>
+              <td colSpan={forecastMonths.length + 2} />
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
