@@ -320,6 +320,7 @@ export async function POST(request: NextRequest) {
         )
         .catch(() => {})
     }
+    console.error('[IMPORT_SAVE] Error:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack?.split('\n').slice(0, 5).join(' | ') : '')
     return handleRouteError('IMPORT_SAVE_POST', error)
   }
 }
