@@ -55,29 +55,28 @@ describe('Gap 1 — Forecast result URL (bug condition exploration)', () => {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 1.3 — Gap 4: addMember sets acceptedAt immediately
-// Bug condition: member.acceptedAt IS NULL after addMember()
-// On FIXED code this test PASSES (acceptedAt is set)
+// Task 1.3 — Gap 4: member invites are email-based pending invites
+// Bug condition: raw Clerk IDs are accepted and members are activated immediately
+// On FIXED code this test PASSES (email invite flow + explicit acceptance)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('Gap 4 — Member invite acceptedAt (bug condition exploration)', () => {
-  it('addMember() insert includes acceptedAt: new Date().toISOString()', () => {
+describe('Gap 4 — Member invites require explicit acceptance', () => {
+  it('members API accepts invitedEmail, not raw clerkUserId', () => {
     const src = readFileSync(
-      resolve(process.cwd(), 'src/lib/db/queries/company-members.ts'),
+      resolve(process.cwd(), 'src/app/api/companies/[id]/members/route.ts'),
       'utf-8'
     )
-    // The .values({...}) block in addMember must include acceptedAt
-    const fnMatch = src.match(/async function addMember[\s\S]*?^}/m)?.[0] ?? ''
-    expect(fnMatch).toMatch(/acceptedAt\s*:/)
-    expect(fnMatch).toMatch(/new Date\(\)\.toISOString\(\)/)
+    expect(src).toMatch(/invitedEmail/)
+    expect(src).not.toMatch(/clerkUserId:\s*z\.string/)
   })
 
-  it('canAccessCompany returns true for member with non-null acceptedAt', () => {
-    // Verify the logic: !!member?.acceptedAt is true when acceptedAt is a non-null ISO string
-    const isoString = new Date().toISOString()
-    expect(!!isoString).toBe(true)
-    const nullValue: string | null = null
-    expect(!!nullValue).toBe(false)
+  it('acceptCompanyInvite creates company membership only after acceptance', () => {
+    const src = readFileSync(
+      resolve(process.cwd(), 'src/lib/db/queries/company-invites.ts'),
+      'utf-8'
+    )
+    expect(src).toMatch(/export\s+async\s+function\s+acceptCompanyInvite/)
+    expect(src).toMatch(/acceptedAt:\s*now/)
   })
 })
 

@@ -1,6 +1,12 @@
 import { type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { resolveAuthedCompany, isErrorResponse, jsonOk, jsonError } from '@/lib/api/helpers'
+import {
+  resolveAuthedCompany,
+  isErrorResponse,
+  jsonOk,
+  jsonError,
+  requireCompanyCapability,
+} from '@/lib/api/helpers'
 import { db, schema } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 
@@ -30,6 +36,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
+    const capabilityError = requireCompanyCapability(ctx, 'settings.manage')
+    if (capabilityError) return capabilityError
 
     const body = await request.json() as unknown
     const parsed = upsertSchema.safeParse(body)

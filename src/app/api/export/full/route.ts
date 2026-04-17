@@ -1,5 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { resolveAuthedCompany, isErrorResponse, jsonError } from '@/lib/api/helpers'
+import {
+  resolveAuthedCompany,
+  isErrorResponse,
+  jsonError,
+  requireCompanyCapability,
+} from '@/lib/api/helpers'
 import { db, schema } from '@/lib/db'
 import { eq } from 'drizzle-orm'
 
@@ -23,6 +28,8 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
+    const capabilityError = requireCompanyCapability(ctx, 'reports.export')
+    if (capabilityError) return capabilityError
 
     const companyId = ctx.companyId
 

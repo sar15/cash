@@ -4,6 +4,7 @@ import { complianceRemindersCron } from '@/lib/inngest/functions/compliance-remi
 import { cleanupIdempotencyKeys } from '@/lib/inngest/functions/cleanup-idempotency-keys'
 import { recomputeForecast } from '@/lib/inngest/functions/recompute-forecast'
 import { scheduledMonthlyReport } from '@/lib/inngest/functions/scheduled-reports'
+import { sendWelcomeEmailOnSignup } from '@/lib/inngest/functions/send-welcome-email'
 import { weeklyCashAlerts } from '@/lib/inngest/functions/weekly-cash-alerts'
 
 export const { GET, POST, PUT } = serve({
@@ -13,6 +14,7 @@ export const { GET, POST, PUT } = serve({
     cleanupIdempotencyKeys,
     recomputeForecast,
     scheduledMonthlyReport,
+    sendWelcomeEmailOnSignup,
     weeklyCashAlerts,
   ],
 })

@@ -5,6 +5,11 @@ export interface ParsedSheet {
   data: unknown[][];
 }
 
+const MAX_SIZE = 10 * 1024 * 1024
+const MAX_SHEETS = 10
+const MAX_ROWS_PER_SHEET = 5000
+const MAX_COLUMNS_PER_ROW = 100
+
 /**
  * Parses an Excel or CSV file buffer into raw data arrays.
  */
@@ -39,7 +44,13 @@ function parseCSV(text: string): string[][] {
           i++;
         }
         row.push(current);
+        if (row.length > MAX_COLUMNS_PER_ROW) {
+          throw new Error(`CSV contains more than ${MAX_COLUMNS_PER_ROW} columns in a row.`)
+        }
         result.push(row);
+        if (result.length > MAX_ROWS_PER_SHEET) {
+          throw new Error(`CSV contains more than ${MAX_ROWS_PER_SHEET} rows.`)
+        }
         row = [];
         current = '';
       } else {
@@ -50,6 +61,9 @@ function parseCSV(text: string): string[][] {
   
   if (current || row.length > 0) {
     row.push(current);
+    if (row.length > MAX_COLUMNS_PER_ROW) {
+      throw new Error(`CSV contains more than ${MAX_COLUMNS_PER_ROW} columns in a row.`)
+    }
     result.push(row);
   }
   
@@ -96,7 +110,6 @@ function normalizeCell(cell: unknown): unknown {
 
 export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<ParsedSheet[]> {
   // Reject files >10MB to prevent OOM in serverless environment
-  const MAX_SIZE = 10 * 1024 * 1024
   if (buffer.byteLength > MAX_SIZE) {
     throw new Error(`File too large (${Math.round(buffer.byteLength / 1024 / 1024)}MB). Maximum size is 10MB.`)
   }
@@ -121,15 +134,25 @@ export async function parseExcelBuffer(buffer: ArrayBuffer): Promise<ParsedSheet
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
 
+  if (workbook.worksheets.length > MAX_SHEETS) {
+    throw new Error(`Workbook contains more than ${MAX_SHEETS} sheets.`)
+  }
+
   const result: ParsedSheet[] = [];
 
   workbook.eachSheet((worksheet) => {
     const data: unknown[][] = [];
 
     worksheet.eachRow({ includeEmpty: false }, (row) => {
+      if (data.length >= MAX_ROWS_PER_SHEET) {
+        throw new Error(`Worksheet "${worksheet.name}" contains more than ${MAX_ROWS_PER_SHEET} rows.`)
+      }
       const rowValues = row.values as unknown[];
       // ExcelJS row.values is 1-indexed (index 0 is undefined), slice from 1
       const cells = rowValues.slice(1).map((cell) => normalizeCell(cell));
+      if (cells.length > MAX_COLUMNS_PER_ROW) {
+        throw new Error(`Worksheet "${worksheet.name}" contains more than ${MAX_COLUMNS_PER_ROW} columns.`)
+      }
       data.push(cells);
     });
 

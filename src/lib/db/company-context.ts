@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 
 import { db, schema } from '@/lib/db'
 import { canAccessCompany, getMemberRole, type MemberRole } from '@/lib/db/queries/company-members'
-import { canAccessCompanyViaFirm } from '@/lib/db/queries/firms'
+import { canAccessCompanyViaFirm, getFirmMemberRole } from '@/lib/db/queries/firms'
 
 // FIX audit2: Remove hardcoded "Patel Engineering Works" default
 export async function getOrCreatePrimaryCompanyForUser(
@@ -99,13 +99,23 @@ export async function resolveCompanyAccessForUser(
   }
 
   const role = await getMemberRole(company.id, clerkUserId)
-  if (!role) {
-    return null
+  if (role) {
+    return {
+      company,
+      isOwner: false,
+      role,
+    }
   }
 
-  return {
-    company,
-    isOwner: false,
-    role,
+  // Check firm-linked access — firm members get 'editor' role for client companies
+  const firmRole = await getFirmMemberRole(company.id, clerkUserId)
+  if (firmRole) {
+    return {
+      company,
+      isOwner: false,
+      role: firmRole,
+    }
   }
+
+  return null
 }

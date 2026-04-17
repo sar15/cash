@@ -37,6 +37,8 @@ interface PreviewRow {
   values: PreviewValue[]
 }
 
+const MAX_PREVIEW_ROWS = 1000
+
 function toPaise(value: number | null) {
   return value === null ? 0 : Math.round(value * 100)
 }
@@ -202,6 +204,10 @@ export async function buildImportPreview(buffer: ArrayBuffer, requestedSheetName
     })
     .filter((row): row is PreviewRow => row !== null)
     .filter((row) => row.matchType !== 'skipped' && (row.values.some((value) => value.amountPaise !== 0) || row.mappedAccountId !== null))
+
+  if (rows.length > MAX_PREVIEW_ROWS) {
+    throw new RouteError(422, `Preview contains more than ${MAX_PREVIEW_ROWS} data rows. Please split the file into smaller imports.`)
+  }
 
   return {
     sheets: sheets.map((sheet) => ({

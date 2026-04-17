@@ -111,7 +111,7 @@ export default function SettingsPage() {
 
   // Team members state
   const [members, setMembers] = useState<Array<{ id: string; clerkUserId: string; role: string; invitedEmail?: string | null; acceptedAt?: string | null }>>([])
-  const [inviteUserId, setInviteUserId] = useState('')
+  const [invites, setInvites] = useState<Array<{ id: string; invitedEmail: string; role: string; expiresAt: string; createdAt?: string | null }>>([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer')
   const [isInviting, setIsInviting] = useState(false)
@@ -135,7 +135,10 @@ export default function SettingsPage() {
     if (!companyId) return
     fetch(`/api/companies/${companyId}/members`)
       .then(r => r.ok ? r.json() : null)
-      .then((data: { members?: typeof members } | null) => { if (data?.members) setMembers(data.members) })
+      .then((data: { members?: typeof members; invites?: typeof invites } | null) => {
+        if (data?.members) setMembers(data.members)
+        if (data?.invites) setInvites(data.invites)
+      })
       .catch(() => {})
   }, [companyId])
 
@@ -153,31 +156,62 @@ export default function SettingsPage() {
   }, [complianceConfig])
 
   const handleInviteMember = useCallback(async () => {
-    if (!companyId || !inviteUserId.trim()) return
+    if (!companyId || !inviteEmail.trim()) return
     setIsInviting(true)
     try {
       const res = await fetch(`/api/companies/${companyId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clerkUserId: inviteUserId.trim(), role: inviteRole, invitedEmail: inviteEmail.trim() || undefined }),
+        body: JSON.stringify({ invitedEmail: inviteEmail.trim(), role: inviteRole }),
       })
-      if (res.ok) {
-        const data = await res.json() as { member: typeof members[0] }
-        setMembers(prev => [...prev.filter(m => m.clerkUserId !== data.member.clerkUserId), data.member])
-        setInviteUserId('')
-        setInviteEmail('')
-        showToast('Member invited', 'success')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Failed to create invitation' }))
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to create invitation')
       }
-    } catch { /* ignore */ } finally {
+
+      const data = await res.json() as {
+        invite: typeof invites[number]
+        inviteUrl?: string
+      }
+      setInvites(prev => [...prev.filter(invite => invite.id !== data.invite.id), data.invite])
+      setInviteEmail('')
+      if (data.inviteUrl && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(data.inviteUrl).catch(() => {})
+      }
+      showToast('Invitation created', 'success')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to create invitation', 'error')
+    } finally {
       setIsInviting(false)
     }
-  }, [companyId, inviteUserId, inviteEmail, inviteRole, showToast])
+  }, [companyId, inviteEmail, inviteRole, showToast])
 
-  const handleRemoveMember = useCallback(async (clerkUserId: string) => {
+  const handleRemoveMember = useCallback(async (memberId: string) => {
     if (!companyId) return
-    await fetch(`/api/companies/${companyId}/members?clerkUserId=${encodeURIComponent(clerkUserId)}`, { method: 'DELETE' })
-    setMembers(prev => prev.filter(m => m.clerkUserId !== clerkUserId))
-    showToast('Member removed', 'success')
+    try {
+      const response = await fetch(`/api/companies/${companyId}/members?memberId=${encodeURIComponent(memberId)}`, { method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error('Failed to remove member')
+      }
+      setMembers(prev => prev.filter(m => m.id !== memberId))
+      showToast('Member removed', 'success')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to remove member', 'error')
+    }
+  }, [companyId, showToast])
+
+  const handleRevokeInvite = useCallback(async (inviteId: string) => {
+    if (!companyId) return
+    try {
+      const response = await fetch(`/api/companies/${companyId}/members?inviteId=${encodeURIComponent(inviteId)}`, { method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error('Failed to revoke invitation')
+      }
+      setInvites(prev => prev.filter(invite => invite.id !== inviteId))
+      showToast('Invitation revoked', 'success')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to revoke invitation', 'error')
+    }
   }, [companyId, showToast])
 
   const handleSave = useCallback(async () => {
@@ -496,20 +530,37 @@ export default function SettingsPage() {
         icon={Users}
       >
         {/* Current members */}
-        {members.length > 0 && (
+        {(members.length > 0 || invites.length > 0) && (
           <div className="mb-4 divide-y divide-[#E5E7EB] rounded-lg border border-[#E5E7EB]">
             {members.map(m => (
               <div key={m.id} className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-[#0F172A]">{m.invitedEmail ?? m.clerkUserId}</p>
                   <p className="text-xs text-[#64748B]">
-                    {m.role} · {m.acceptedAt ? 'Active' : 'Pending invite'}
+                    {m.role} · Active
                   </p>
                 </div>
                 <button
-                  onClick={() => handleRemoveMember(m.clerkUserId)}
+                  onClick={() => handleRemoveMember(m.id)}
                   className="rounded p-1.5 text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626]"
                   title="Remove member"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            {invites.map((invite) => (
+              <div key={invite.id} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-[#0F172A]">{invite.invitedEmail}</p>
+                  <p className="text-xs text-[#64748B]">
+                    {invite.role} · Pending invite
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRevokeInvite(invite.id)}
+                  className="rounded p-1.5 text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626]"
+                  title="Revoke invite"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -520,16 +571,7 @@ export default function SettingsPage() {
         {/* Invite form */}
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField label="Clerk User ID">
-              <input
-                type="text"
-                value={inviteUserId}
-                onChange={e => setInviteUserId(e.target.value)}
-                placeholder="user_XXXXXX"
-                className="surface-input"
-              />
-            </FormField>
-            <FormField label="Email (optional)">
+            <FormField label="Invite Email">
               <input
                 type="email"
                 value={inviteEmail}
@@ -550,7 +592,7 @@ export default function SettingsPage() {
             </select>
             <button
               onClick={handleInviteMember}
-              disabled={!inviteUserId.trim() || isInviting}
+              disabled={!inviteEmail.trim() || isInviting}
               className="inline-flex items-center gap-2 rounded-lg border border-[#0F172A] bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#1E293B] disabled:opacity-60"
             >
               {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}

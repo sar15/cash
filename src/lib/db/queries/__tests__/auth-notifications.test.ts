@@ -25,12 +25,12 @@ describe('requireAccessibleCompany — exists and has correct signature (Bug 4)'
     expect(src).toMatch(/requireAccessibleCompany\s*\(\s*userId\s*:\s*string\s*,\s*companyId\s*:\s*string/)
   })
 
-  it('requireAccessibleCompany uses canAccessCompany for member check', () => {
+  it('requireAccessibleCompany uses resolveCompanyForUser for access check', () => {
     const src = readFileSync(
       resolve(process.cwd(), 'src/lib/server/auth.ts'),
       'utf-8'
     )
-    expect(src).toMatch(/canAccessCompany/)
+    expect(src).toMatch(/resolveCompanyForUser/)
   })
 
   it('requireAccessibleCompany throws 401 when access is denied', () => {

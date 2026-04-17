@@ -1,4 +1,4 @@
-import { eq, and, isNull, or } from 'drizzle-orm'
+import { eq, and, isNull, or, sql } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
 
 export interface CreateNotificationInput {
@@ -33,18 +33,18 @@ export async function getNotifications(companyId: string, clerkUserId: string, l
 }
 
 export async function getUnreadCount(companyId: string, clerkUserId: string): Promise<number> {
-  const all = await db.query.notifications.findMany({
-    where: and(
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.notifications)
+    .where(and(
       eq(schema.notifications.companyId, companyId),
       isNull(schema.notifications.readAt),
       or(
         isNull(schema.notifications.clerkUserId),
         eq(schema.notifications.clerkUserId, clerkUserId)
       )
-    ),
-    columns: { id: true },
-  })
-  return all.length
+    ))
+  return Number(row?.count ?? 0)
 }
 
 export async function markNotificationRead(id: string, companyId: string, clerkUserId: string) {

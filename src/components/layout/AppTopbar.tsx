@@ -19,6 +19,7 @@ interface Notification {
 }
 
 function NotificationBell({ companyId }: { companyId: string }) {
+  const showToast = useUIStore((state) => state.showToast)
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -51,9 +52,13 @@ function NotificationBell({ companyId }: { companyId: string }) {
   }, [])
 
   const markAllRead = async () => {
-    await apiPost(`/api/notifications/read-all?companyId=${companyId}`, {}).catch(() => {})
-    setNotifications(prev => prev.map(n => ({ ...n, readAt: new Date().toISOString() })))
-    setUnreadCount(0)
+    try {
+      await apiPost(`/api/notifications/read-all?companyId=${companyId}`, {})
+      setNotifications(prev => prev.map(n => ({ ...n, readAt: new Date().toISOString() })))
+      setUnreadCount(0)
+    } catch {
+      showToast('Failed to mark notifications as read', 'error')
+    }
   }
 
   return (

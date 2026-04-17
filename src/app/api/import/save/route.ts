@@ -11,9 +11,9 @@ import { markForecastStale } from '@/lib/db/queries/forecast-results'
 import { handleRouteError, jsonResponse, parseJsonBody, RouteError } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 import {
-  findIdempotentResponse,
+  reserveIdempotencySlot,
+  completeIdempotencySlot,
   getIdempotencyKey,
-  saveIdempotentResponse,
   toIdempotencyResponse,
 } from '@/lib/server/idempotency'
 
@@ -61,6 +61,16 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase()
 }
 
+function extractStoragePath(fileKey: string) {
+  if (fileKey.startsWith('ut:')) {
+    const separatorIndex = fileKey.indexOf(':', 3)
+    if (separatorIndex < 0) return null
+    return fileKey.slice(separatorIndex + 1)
+  }
+
+  return fileKey
+}
+
 function normalizePeriod(value: string) {
   if (/^\d{4}-\d{2}-01$/.test(value)) {
     return value
@@ -86,17 +96,24 @@ export async function POST(request: NextRequest) {
     const body = await parseJsonBody(request, importSaveRequestSchema)
     const company = await requireOwnedCompany(userId, body.companyId)
 
-    // Idempotency: if the client sends an Idempotency-Key header, return the
-    // cached response for duplicate submissions (e.g. double-click, retry on slow connection)
+    // Idempotency: reserve a slot before processing to prevent concurrent duplicate imports.
+    // - 'completed'  → return cached response immediately
+    // - 'in_progress' → concurrent replay, return 409
+    // - 'proceed'    → we own the slot, continue processing
     const idempotencyKey = getIdempotencyKey(request)
-    if (idempotencyKey) {
-      const cached = await findIdempotentResponse({
-        key: idempotencyKey,
-        companyId: company.id,
-        route: '/api/import/save',
-        method: 'POST',
-      })
-      if (cached) return toIdempotencyResponse(cached)
+    const idempotencyCtx = idempotencyKey
+      ? { key: idempotencyKey, companyId: company.id, route: '/api/import/save', method: 'POST' }
+      : null
+
+    if (idempotencyCtx) {
+      const reservation = await reserveIdempotencySlot(idempotencyCtx)
+      if (reservation.status === 'completed') return toIdempotencyResponse(reservation.cached)
+      if (reservation.status === 'in_progress') {
+        return jsonResponse(
+          { error: 'A duplicate import is already in progress. Please wait and retry.' },
+          { status: 409 }
+        )
+      }
     }
 
     const result = await db.transaction(async (tx) => {
@@ -123,6 +140,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Batch insert new accounts (single query)
+      // onConflictDoUpdate handles the race where two concurrent imports try to insert the same account
       if (toInsert.length > 0) {
         const inserted = await tx
           .insert(schema.accounts)
@@ -137,6 +155,17 @@ export async function POST(request: NextRequest) {
             isGroup: a.isGroup,
             sortOrder: a.sortOrder,
           })))
+          .onConflictDoUpdate({
+            target: [schema.accounts.companyId, schema.accounts.name],
+            set: {
+              code: sql`excluded.code`,
+              accountType: sql`excluded.account_type`,
+              standardMapping: sql`excluded.standard_mapping`,
+              level: sql`excluded.level`,
+              isGroup: sql`excluded.is_group`,
+              sortOrder: sql`excluded.sort_order`,
+            },
+          })
           .returning()
         for (const row of inserted) {
           accountIdByName.set(normalizeKey(row.name), row.id)
@@ -253,9 +282,15 @@ export async function POST(request: NextRequest) {
 
     // Clean up uploaded file from R2 after successful save (fire-and-forget)
     if (body.fileKey) {
-      deleteFile(body.fileKey).catch(() => {
-        console.warn('[IMPORT_SAVE] Failed to delete uploaded file:', body.fileKey)
-      })
+      const storagePath = extractStoragePath(body.fileKey)
+      const expectedPrefix = `uploads/${company.id}/`
+      if (storagePath?.startsWith(expectedPrefix)) {
+        deleteFile(body.fileKey).catch(() => {
+          console.warn('[IMPORT_SAVE] Failed to delete uploaded file:', body.fileKey)
+        })
+      } else {
+        console.warn('[IMPORT_SAVE] Skipped deleting unexpected file key:', body.fileKey)
+      }
     }
 
     const responseBody = {
@@ -263,13 +298,9 @@ export async function POST(request: NextRequest) {
       ...result,
     }
 
-    // Cache the response for idempotent retries (fire-and-forget)
-    if (idempotencyKey) {
-      saveIdempotentResponse(
-        { key: idempotencyKey, companyId: company.id, route: '/api/import/save', method: 'POST' },
-        200,
-        responseBody
-      ).catch(() => {})
+    // Mark idempotency slot as completed so concurrent retries get the cached response
+    if (idempotencyCtx) {
+      completeIdempotencySlot(idempotencyCtx, 200, responseBody).catch(() => {})
     }
 
     return jsonResponse(responseBody)

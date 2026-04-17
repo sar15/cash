@@ -10,13 +10,12 @@ export async function GET(request: NextRequest) {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
 
-    // Run queries in parallel but catch individual failures gracefully
     const [accounts, actuals, valueRules, timingProfiles, complianceConfig] = await Promise.all([
-      accountQueries.getAccountsForCompany(ctx.companyId).catch(() => []),
-      historicalQueries.getActualsForCompany(ctx.companyId).catch(() => []),
-      configQueries.getValueRules(ctx.companyId).catch(() => []),
-      configQueries.getTimingProfiles(ctx.companyId).catch(() => []),
-      configQueries.getComplianceConfig(ctx.companyId).catch(() => null),
+      accountQueries.getAccountsForCompany(ctx.companyId),
+      historicalQueries.getActualsForCompany(ctx.companyId),
+      configQueries.getValueRules(ctx.companyId),
+      configQueries.getTimingProfiles(ctx.companyId),
+      configQueries.getComplianceConfig(ctx.companyId),
     ])
 
     return jsonOk({
@@ -30,4 +29,3 @@ export async function GET(request: NextRequest) {
     return jsonError('Failed to fetch forecast config', 500)
   }
 }
-

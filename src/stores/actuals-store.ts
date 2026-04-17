@@ -70,8 +70,7 @@ export const useActualsStore = create<ActualsState>((set, get) => ({
   },
 
   bulkUpsert: async (companyId, newActuals) => {
-    await apiPatch('/api/historical', {
-      companyId,
+    await apiPatch(`/api/historical?companyId=${companyId}`, {
       actuals: newActuals,
     })
     // Reload to get DB-canonical data

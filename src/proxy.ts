@@ -1,6 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse, type NextRequest } from 'next/server'
-import { checkRateLimit, checkImportRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkImportRateLimit, checkReportRateLimit, checkExportRateLimit } from '@/lib/rate-limit'
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   '/privacy',
   '/api/health',
   '/api/webhooks(.*)',
+  '/api/inngest(.*)', // Inngest server-to-server — verified by Inngest signing key, not Clerk
   '/api/import/template', // Public blank CSV template — no company data
   '/manifest.webmanifest', // PWA manifest — must be public
 ])
@@ -83,6 +84,28 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
       if (!success) {
         return NextResponse.json(
           { error: 'Too many import requests. Please wait before trying again.' },
+          { status: 429 }
+        )
+      }
+    }
+
+    // Report generation: 5/hour per user (CPU + storage intensive)
+    if (path === '/api/reports/generate') {
+      const { success } = await checkReportRateLimit(userId)
+      if (!success) {
+        return NextResponse.json(
+          { error: 'Too many report requests. Please wait before generating another report.' },
+          { status: 429 }
+        )
+      }
+    }
+
+    // Full export: 3/hour per user (large DB query + payload)
+    if (path === '/api/export/full') {
+      const { success } = await checkExportRateLimit(userId)
+      if (!success) {
+        return NextResponse.json(
+          { error: 'Too many export requests. Please wait before exporting again.' },
           { status: 429 }
         )
       }

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { companies, companyMembers, forecastResults, gstFilings } from '@/lib/db/schema'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, inArray } from 'drizzle-orm'
 import { getFirmClientCompanies } from '@/lib/db/queries/firms'
 import { getOrCreateUserProfile } from '@/lib/db/queries/user-profiles'
 import { todayISTString } from '@/lib/utils/ist'
@@ -19,9 +19,12 @@ export interface FirmCompanySummary {
 /**
  * Get all companies accessible by a user (owned or member) with real metrics
  * from cached forecast_results — no engine re-run on page load.
+ *
+ * All DB queries are batched by company IDs to avoid N+1.
  */
 export async function getFirmCompanies(clerkUserId: string): Promise<FirmCompanySummary[]> {
   const profile = await getOrCreateUserProfile(clerkUserId)
+
   // Get companies where user is owner
   const ownedCompanies = await db.query.companies.findMany({
     where: eq(companies.clerkUserId, clerkUserId),
@@ -50,90 +53,92 @@ export async function getFirmCompanies(clerkUserId: string): Promise<FirmCompany
     }
   }
 
-  // Use IST today — Vercel runs UTC, India is UTC+5:30
+  if (allCompanies.length === 0) return []
+
+  const companyIds = allCompanies.map((c) => c.id)
+
+  // Batch fetch all baseline forecast results in one query
+  const allForecastResults = await db.query.forecastResults.findMany({
+    where: and(
+      inArray(forecastResults.companyId, companyIds),
+      isNull(forecastResults.scenarioId)
+    ),
+  })
+  const forecastByCompany = new Map(allForecastResults.map((r) => [r.companyId, r]))
+
+  // Batch fetch all GST filings in one query
+  const allFilings = await db.query.gstFilings.findMany({
+    where: inArray(gstFilings.companyId, companyIds),
+  })
+
+  // Group filings by company
+  const filingsByCompany = new Map<string, typeof allFilings>()
+  for (const filing of allFilings) {
+    const list = filingsByCompany.get(filing.companyId) ?? []
+    list.push(filing)
+    filingsByCompany.set(filing.companyId, list)
+  }
+
   const todayStr = todayISTString()
   const todayMs = new Date(todayStr).getTime()
 
-  const summaries: FirmCompanySummary[] = await Promise.all(
-    allCompanies.map(async (company) => {
-      // Pull cached baseline forecast result
-      const cached = await db.query.forecastResults.findFirst({
-        where: and(
-          eq(forecastResults.companyId, company.id),
-          isNull(forecastResults.scenarioId)
-        ),
-      })
+  return allCompanies.map((company) => {
+    const cached = forecastByCompany.get(company.id)
 
-      let cashRunwayMonths: number | null = null
-      let netIncome = 0
-      let lastUpdated = company.updatedAt ?? new Date().toISOString()
+    let cashRunwayMonths: number | null = null
+    let netIncome = 0
+    let lastUpdated = company.updatedAt ?? new Date().toISOString()
 
-      if (cached) {
-        lastUpdated = cached.createdAt ?? lastUpdated
-        try {
-          const metrics = JSON.parse(cached.metrics) as {
-            closingCash?: number
-            totalNetIncome?: number
-            forecastMonths?: string[]
+    if (cached) {
+      lastUpdated = cached.createdAt ?? lastUpdated
+      try {
+        const metrics = JSON.parse(cached.metrics) as {
+          closingCash?: number
+          totalNetIncome?: number
+          forecastMonths?: string[]
+        }
+        const cfData = JSON.parse(cached.cfData) as { months?: Array<{ operatingCashFlow?: number }> }
+
+        netIncome = metrics.totalNetIncome ?? 0
+
+        const closingCash = metrics.closingCash ?? 0
+        const cfMonths = cfData.months ?? []
+        const negativeCFMonths = cfMonths.filter((m) => (m?.operatingCashFlow ?? 0) < 0)
+        if (negativeCFMonths.length > 0) {
+          const avgBurn = Math.abs(
+            negativeCFMonths.reduce((s, m) => s + (m?.operatingCashFlow ?? 0), 0) / negativeCFMonths.length
+          )
+          if (avgBurn > 0) {
+            cashRunwayMonths = Math.min(36, Math.round((closingCash / avgBurn) * 10) / 10)
           }
-          const cfData = JSON.parse(cached.cfData) as { months?: Array<{ operatingCashFlow?: number }> }
+        } else if (closingCash > 0) {
+          cashRunwayMonths = 36
+        }
+      } catch {}
+    }
 
-          netIncome = metrics.totalNetIncome ?? 0
-
-          // Runway = closingCash / avgMonthlyBurn (capped at 36)
-          const closingCash = metrics.closingCash ?? 0
-          const cfMonths = cfData.months ?? []
-          const negativeCFMonths = cfMonths.filter(m => (m?.operatingCashFlow ?? 0) < 0)
-          if (negativeCFMonths.length > 0) {
-            const avgBurn = Math.abs(
-              negativeCFMonths.reduce((s, m) => s + (m?.operatingCashFlow ?? 0), 0) / negativeCFMonths.length
-            )
-            if (avgBurn > 0) {
-              cashRunwayMonths = Math.min(36, Math.round((closingCash / avgBurn) * 10) / 10)
-            }
-          } else if (closingCash > 0) {
-            cashRunwayMonths = 36 // Positive cash throughout — capped at 36
-          }
-        } catch {}
-      }
-
-      // Compliance health: check for overdue GST filings
-      const overdueFilings = await db.query.gstFilings.findMany({
-        where: and(
-          eq(gstFilings.companyId, company.id),
-          eq(gstFilings.status, 'overdue')
-        ),
-      })
-
-      // Check for filings due within 7 days
-      const pendingFilings = await db.query.gstFilings.findMany({
-        where: and(
-          eq(gstFilings.companyId, company.id),
-          eq(gstFilings.status, 'pending')
-        ),
-      })
-      const dueSoon = pendingFilings.filter(f => {
-        const due = new Date(f.dueDate)
-        const daysUntilDue = (due.getTime() - todayMs) / (1000 * 60 * 60 * 24)
-        return daysUntilDue <= 7
-      })
-
-      let complianceHealth: 'good' | 'warning' | 'critical' = 'good'
-      if (overdueFilings.length > 0) complianceHealth = 'critical'
-      else if (dueSoon.length > 0) complianceHealth = 'warning'
-
-      return {
-        id: company.id,
-        name: company.name,
-        industry: company.industry ?? 'general',
-        cashRunwayMonths,
-        cashRunwayDays: cashRunwayMonths !== null ? Math.round(cashRunwayMonths * 30) : null,
-        netIncome,
-        complianceHealth,
-        lastUpdated,
-      }
+    const companyFilings = filingsByCompany.get(company.id) ?? []
+    const overdueFilings = companyFilings.filter((f) => f.status === 'overdue')
+    const dueSoon = companyFilings.filter((f) => {
+      if (f.status !== 'pending') return false
+      const due = new Date(f.dueDate)
+      const daysUntilDue = (due.getTime() - todayMs) / (1000 * 60 * 60 * 24)
+      return daysUntilDue <= 7
     })
-  )
 
-  return summaries
+    let complianceHealth: 'good' | 'warning' | 'critical' = 'good'
+    if (overdueFilings.length > 0) complianceHealth = 'critical'
+    else if (dueSoon.length > 0) complianceHealth = 'warning'
+
+    return {
+      id: company.id,
+      name: company.name,
+      industry: company.industry ?? 'general',
+      cashRunwayMonths,
+      cashRunwayDays: cashRunwayMonths !== null ? Math.round(cashRunwayMonths * 30) : null,
+      netIncome,
+      complianceHealth,
+      lastUpdated,
+    }
+  })
 }

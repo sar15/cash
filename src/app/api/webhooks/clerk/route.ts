@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { Webhook } from 'svix'
-import { sendWelcomeEmail } from '@/lib/email/send'
+import { and, eq } from 'drizzle-orm'
+
+import { db, schema } from '@/lib/db'
+import { inngest } from '@/lib/inngest/client'
 
 interface ClerkUserCreatedEvent {
   type: 'user.created'
@@ -49,8 +52,40 @@ export async function POST(request: NextRequest) {
   if (event.type === 'user.created') {
     const primaryEmail = event.data.email_addresses[0]?.email_address
     if (primaryEmail) {
+      const [delivery] = await db
+        .insert(schema.webhookDeliveries)
+        .values({
+          provider: 'clerk',
+          eventId: svixId,
+        })
+        .onConflictDoNothing({
+          target: [schema.webhookDeliveries.provider, schema.webhookDeliveries.eventId],
+        })
+        .returning()
+
+      if (!delivery) {
+        return NextResponse.json({ received: true, duplicate: true })
+      }
+
       const name = [event.data.first_name, event.data.last_name].filter(Boolean).join(' ')
-      await sendWelcomeEmail({ to: primaryEmail, name: name || undefined })
+      try {
+        await inngest.send({
+          name: 'user/signed.up',
+          data: {
+            clerkUserId: event.data.id,
+            email: primaryEmail,
+            name: name || undefined,
+          },
+        })
+      } catch (error) {
+        await db
+          .delete(schema.webhookDeliveries)
+          .where(and(
+            eq(schema.webhookDeliveries.provider, 'clerk'),
+            eq(schema.webhookDeliveries.eventId, svixId)
+          ))
+        throw error
+      }
     }
   }
 

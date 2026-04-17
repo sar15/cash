@@ -29,7 +29,7 @@ export default function ReportsPage() {
 
       const response = await fetch('/api/reports/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Company-Id': companyId },
         body: JSON.stringify({
           companyId,
           periodStart: startDate,

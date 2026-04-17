@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useCompanyContext } from '@/hooks/use-company-context'
+import { useUIStore } from '@/stores/ui-store'
 import { CheckCircle2, AlertTriangle, DollarSign } from 'lucide-react'
 import { PageHeader, HeaderBadge, SurfaceCard } from '@/components/shared/page-header'
 import { formatAuto } from '@/lib/utils/indian-format'
@@ -20,9 +21,11 @@ interface BankReconciliation {
 
 export default function ReconciliationPage() {
   const { company, companyId } = useCompanyContext()
+  const showToast = useUIStore((state) => state.showToast)
   const [reconciliations, setReconciliations] = useState<BankReconciliation[]>([])
   const [isLoading, setIsLoading] = useState(!!companyId)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [bankBalance, setBankBalance] = useState('')
 
   useEffect(() => {
@@ -40,33 +43,43 @@ export default function ReconciliationPage() {
     const balancePaise = Math.round(parseFloat(bankBalance) * 100)
     if (isNaN(balancePaise)) return
 
+    setSubmittingId(reconId)
     try {
       const response = await fetch(`/api/reconciliations/${reconId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Company-Id': companyId ?? '',
+        },
         body: JSON.stringify({ bankClosingBalancePaise: balancePaise }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        setReconciliations((prev) =>
-          prev.map((r) =>
-            r.id === reconId
-              ? {
-                  ...r,
-                  bankClosingBalancePaise: balancePaise,
-                  variancePaise: data.variancePaise,
-                  status: data.status,
-                  reconciledAt: new Date().toISOString(),
-                }
-              : r
-          )
-        )
-        setEditingId(null)
-        setBankBalance('')
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Reconciliation failed' }))
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Reconciliation failed')
       }
+
+      const data = await response.json()
+      setReconciliations((prev) =>
+        prev.map((r) =>
+          r.id === reconId
+            ? {
+                ...r,
+                bankClosingBalancePaise: balancePaise,
+                variancePaise: data.variancePaise,
+                status: data.status,
+                reconciledAt: new Date().toISOString(),
+              }
+            : r
+        )
+      )
+      setEditingId(null)
+      setBankBalance('')
     } catch (error) {
       console.error('Reconciliation failed:', error)
+      showToast(error instanceof Error ? error.message : 'Reconciliation failed', 'error')
+    } finally {
+      setSubmittingId(null)
     }
   }
 
@@ -190,6 +203,7 @@ export default function ReconciliationPage() {
                         placeholder="Enter bank balance"
                         className="w-32 rounded border border-[#2563EB] bg-white px-2 py-1 text-sm focus:outline-none"
                         autoFocus
+                        disabled={submittingId === recon.id}
                       />
                     ) : recon.bankClosingBalancePaise !== null ? (
                       formatAuto(recon.bankClosingBalancePaise)
@@ -242,6 +256,7 @@ export default function ReconciliationPage() {
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => handleReconcile(recon.id)}
+                          disabled={submittingId === recon.id}
                           className="btn-press inline-flex items-center gap-1 rounded border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-1 text-[11px] font-medium text-[#059669] transition-colors duration-[80ms] hover:bg-[#D1FAE5]"
                         >
                           <CheckCircle2 className="h-3 w-3" />
@@ -260,6 +275,7 @@ export default function ReconciliationPage() {
                     ) : recon.status === 'unreconciled' ? (
                       <button
                         onClick={() => setEditingId(recon.id)}
+                        disabled={submittingId === recon.id}
                         className="btn-press inline-flex items-center gap-1 rounded border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-1 text-[11px] font-medium text-[#059669] transition-colors duration-[80ms] hover:bg-[#D1FAE5]"
                       >
                         <DollarSign className="h-3 w-3" />

@@ -31,11 +31,30 @@ export interface WelcomeEmailData {
   name?: string
 }
 
+export interface CompanyInviteEmailData {
+  to: string
+  companyName: string
+  invitedByName?: string
+  inviteUrl: string
+  role: 'editor' | 'viewer'
+}
+
 export interface ImportSuccessData {
   to: string
   companyName: string
   accountsCount: number
   periodsCount: number
+}
+
+function hasConfiguredSender() {
+  if (FROM) return true
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[Email] RESEND_FROM_EMAIL not configured — email skipped')
+  } else {
+    console.log('[Email] RESEND_FROM_EMAIL not configured — skipping email send')
+  }
+  return false
 }
 
 export async function sendComplianceReminder(data: ComplianceReminderData) {
@@ -47,6 +66,7 @@ export async function sendComplianceReminder(data: ComplianceReminderData) {
     }
     return
   }
+  if (!hasConfiguredSender()) return
 
   const urgency = data.daysUntil <= 1 ? '🚨 URGENT: ' : data.daysUntil <= 3 ? '⚠️ ' : ''
   const subject = `${urgency}${data.obligationType} due in ${data.daysUntil} day${data.daysUntil === 1 ? '' : 's'} — ${data.companyName}`
@@ -68,12 +88,32 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
     }
     return
   }
+  if (!hasConfiguredSender()) return
 
   await sendEmailWithResilience({
     from: FROM,
     to: data.to,
     subject: 'Welcome to CashFlowIQ — your 12-month forecast is ready',
     html: buildWelcomeHtml(data),
+  })
+}
+
+export async function sendCompanyInviteEmail(data: CompanyInviteEmailData) {
+  if (!resend) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[Email] RESEND_API_KEY not configured — invite email NOT sent to', data.to)
+    } else {
+      console.log('[Email] Resend not configured — skipping invite email to', data.to)
+    }
+    return
+  }
+  if (!hasConfiguredSender()) return
+
+  await sendEmailWithResilience({
+    from: FROM,
+    to: data.to,
+    subject: `${data.companyName} invited you to CashFlowIQ`,
+    html: buildCompanyInviteHtml(data),
   })
 }
 
@@ -86,6 +126,7 @@ export async function sendImportSuccessEmail(data: ImportSuccessData) {
     }
     return
   }
+  if (!hasConfiguredSender()) return
 
   await sendEmailWithResilience({
     from: FROM,
@@ -183,6 +224,42 @@ function buildWelcomeHtml(data: WelcomeEmailData): string {
     </div>
     <div style="padding:16px 32px;background:#F8FAFC;border-top:1px solid #E2E8F0;">
       <p style="margin:0;font-size:12px;color:#94A3B8;">CashFlowIQ · Three-way forecasting for Indian businesses</p>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+function buildCompanyInviteHtml(data: CompanyInviteEmailData): string {
+  const inviterLine = data.invitedByName
+    ? `<p style="margin:0 0 24px;font-size:15px;color:#64748B;line-height:1.6;">${data.invitedByName} invited you to join <strong style="color:#0F172A;">${data.companyName}</strong> on CashFlowIQ as a <strong style="color:#0F172A;text-transform:capitalize;">${data.role}</strong>.</p>`
+    : `<p style="margin:0 0 24px;font-size:15px;color:#64748B;line-height:1.6;">You were invited to join <strong style="color:#0F172A;">${data.companyName}</strong> on CashFlowIQ as a <strong style="color:#0F172A;text-transform:capitalize;">${data.role}</strong>.</p>`
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F8FAFC;font-family:Inter,-apple-system,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;border:1px solid #E2E8F0;overflow:hidden;">
+    <div style="background:#0F172A;padding:24px 32px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="background:#059669;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+          <span style="color:white;font-size:16px;font-weight:bold;">₹</span>
+        </div>
+        <span style="color:white;font-size:16px;font-weight:700;">CashFlowIQ</span>
+      </div>
+    </div>
+    <div style="padding:32px;">
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0F172A;">You’ve been invited</h1>
+      ${inviterLine}
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#94A3B8;">Workspace</p>
+        <p style="margin:0;font-size:18px;font-weight:700;color:#0F172A;">${data.companyName}</p>
+      </div>
+      <a href="${data.inviteUrl}" style="display:inline-block;background:#059669;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
+        Accept invitation →
+      </a>
+      <p style="margin:24px 0 0;font-size:13px;color:#94A3B8;">This invite expires in 7 days.</p>
     </div>
   </div>
 </body>

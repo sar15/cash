@@ -1,10 +1,10 @@
 import { inngest } from '@/lib/inngest/client'
 import { db, schema } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { Resend } from 'resend'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
-const FROM = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
+const FROM = process.env.RESEND_FROM_EMAIL ?? ''
 
 /**
  * Monthly scheduled report delivery — runs on 1st of each month at 9am IST
@@ -19,6 +19,9 @@ export const scheduledMonthlyReport = inngest.createFunction(
   async ({ step }) => {
     if (!resend) {
       return { skipped: true, reason: 'Resend not configured' }
+    }
+    if (!FROM) {
+      return { skipped: true, reason: 'RESEND_FROM_EMAIL not configured' }
     }
 
     const configs = await step.run('fetch-reminder-configs', async () => {
@@ -42,7 +45,11 @@ export const scheduledMonthlyReport = inngest.createFunction(
       // Get cached forecast result
       const forecastResult = await step.run(`load-forecast-${config.companyId}`, async () => {
         return db.query.forecastResults.findFirst({
-          where: eq(schema.forecastResults.companyId, config.companyId),
+          where: and(
+            eq(schema.forecastResults.companyId, config.companyId),
+            isNull(schema.forecastResults.scenarioId),
+            eq(schema.forecastResults.status, 'ready')
+          ),
         })
       })
 

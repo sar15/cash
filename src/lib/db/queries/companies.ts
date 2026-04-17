@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, isNotNull } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
 import { getFirmClientCompanies } from '@/lib/db/queries/firms'
 import { getOrCreateUserProfile } from '@/lib/db/queries/user-profiles'
@@ -19,7 +19,10 @@ export async function getAccessibleCompaniesForUser(clerkUserId: string) {
   })
 
   const members = await db.query.companyMembers.findMany({
-    where: eq(schema.companyMembers.clerkUserId, clerkUserId),
+    where: and(
+      eq(schema.companyMembers.clerkUserId, clerkUserId),
+      isNotNull(schema.companyMembers.acceptedAt)
+    ),
     with: { company: true },
   })
 

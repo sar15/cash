@@ -3,6 +3,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useCompanyContext } from '@/hooks/use-company-context'
 import { useCurrentForecast } from '@/hooks/use-current-forecast'
+import { useUIStore } from '@/stores/ui-store'
 import { formatAuto } from '@/lib/utils/indian-format'
 import { cn } from '@/lib/utils'
 import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, FileText } from 'lucide-react'
@@ -94,7 +95,17 @@ function ComplianceSummary({ items }: { items: ComplianceItem[] }) {
   )
 }
 
-function ComplianceTable({ items, paidItems, onMarkPaid }: { items: ComplianceItem[]; paidItems: Set<string>; onMarkPaid: (id: string) => void }) {
+function ComplianceTable({
+  items,
+  paidItems,
+  onMarkPaid,
+  pendingItemId,
+}: {
+  items: ComplianceItem[]
+  paidItems: Set<string>
+  onMarkPaid: (id: string) => void
+  pendingItemId: string | null
+}) {
   return (
     <SurfaceCard>
       <div className="overflow-x-auto">
@@ -117,6 +128,7 @@ function ComplianceTable({ items, paidItems, onMarkPaid }: { items: ComplianceIt
               const cashAfter = item.cashBefore - item.amount
               const isShortfall = cashAfter < 0
               const isPaid = paidItems.has(item.id)
+              const isSubmitting = pendingItemId === item.id
               const effectiveStatus = isPaid ? 'paid' : item.status
               return (
                 <tr key={item.id} className="hover-row">
@@ -158,8 +170,10 @@ function ComplianceTable({ items, paidItems, onMarkPaid }: { items: ComplianceIt
                   <td className="!font-sans text-right">
                     <button
                       onClick={() => onMarkPaid(item.id)}
+                      disabled={isSubmitting}
                       className={cn(
                         'btn-press inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition-colors duration-[80ms]',
+                        isSubmitting && 'cursor-not-allowed opacity-60',
                         isPaid
                           ? 'border-[#E5E7EB] text-[#94A3B8] hover:border-[#FECACA] hover:text-[#DC2626]'
                           : 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669] hover:bg-[#D1FAE5]'
@@ -204,7 +218,7 @@ function GSTFilingTracker({ companyId }: { companyId: string }) {
     try {
       const response = await fetch(`/api/gst-filings/${filingId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Company-Id': companyId },
         body: JSON.stringify({ referenceNumber: '' })
       })
       if (response.ok) {
@@ -338,55 +352,62 @@ function GSTFilingTracker({ companyId }: { companyId: string }) {
 export default function CompliancePage() {
   const { company, companyId, isLoading: companyLoading } = useCompanyContext()
   const { engineResult } = useCurrentForecast()
+  const showToast = useUIStore((state) => state.showToast)
 
   const now = new Date()
   const [viewMonth, setViewMonth] = useState(now.getMonth())
   const [viewYear, setViewYear] = useState(now.getFullYear())
-  // Track paid items — server-side with localStorage fallback during migration
-  const [paidItems, setPaidItems] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('cashflowiq_paid_compliance')
-      return new Set(JSON.parse(saved ?? '[]') as string[])
-    } catch { return new Set() }
-  })
+  const [paidItems, setPaidItems] = useState<Set<string>>(new Set())
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
 
-  // Fetch server-side paid status and merge with localStorage
-  useEffect(() => {
+  const loadPaidItems = useCallback(async () => {
     if (!companyId) return
-    fetch(`/api/compliance/payments?companyId=${companyId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { paidIds?: string[] } | null) => {
-        if (!data?.paidIds) return
-        setPaidItems(prev => {
-          const merged = new Set([...prev, ...data.paidIds!])
-          return merged
-        })
-      })
-      .catch(() => {/* silently ignore — localStorage fallback still active */})
-  }, [companyId])
-
-  const markPaid = useCallback((itemId: string) => {
-    setPaidItems(prev => {
-      const next = new Set(prev)
-      const isRemoving = next.has(itemId)
-      if (isRemoving) next.delete(itemId)
-      else next.add(itemId)
-      try { localStorage.setItem('cashflowiq_paid_compliance', JSON.stringify([...next])) } catch {}
-      // Sync to server
-      if (companyId) {
-        if (isRemoving) {
-          fetch(`/api/compliance/payments/${encodeURIComponent(itemId)}?companyId=${companyId}`, { method: 'DELETE' }).catch(() => {})
-        } else {
-          fetch(`/api/compliance/payments?companyId=${companyId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ obligationId: itemId }),
-          }).catch(() => {})
-        }
+    try {
+      const response = await fetch(`/api/compliance/payments?companyId=${companyId}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch compliance payment state')
       }
-      return next
-    })
-  }, [companyId])
+      const data = await response.json() as { paidIds?: string[] }
+      setPaidItems(new Set(data.paidIds ?? []))
+    } catch {
+      showToast('Failed to load compliance payment state', 'error')
+    }
+  }, [companyId, showToast])
+
+  useEffect(() => {
+    void loadPaidItems()
+  }, [loadPaidItems])
+
+  const markPaid = useCallback(async (itemId: string) => {
+    if (!companyId) return
+
+    setPendingPaymentId(itemId)
+    const isRemoving = paidItems.has(itemId)
+
+    try {
+      const response = await fetch(
+        isRemoving
+          ? `/api/compliance/payments/${encodeURIComponent(itemId)}?companyId=${companyId}`
+          : `/api/compliance/payments?companyId=${companyId}`,
+        {
+          method: isRemoving ? 'DELETE' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: isRemoving ? undefined : JSON.stringify({ obligationId: itemId }),
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Failed to update compliance payment' }))
+        throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to update compliance payment')
+      }
+
+      await loadPaidItems()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to update compliance payment', 'error')
+    } finally {
+      setPendingPaymentId(null)
+    }
+  }, [companyId, loadPaidItems, paidItems, showToast])
 
   const handlePrev = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1) }
@@ -483,7 +504,7 @@ export default function CompliancePage() {
       />
 
       <ComplianceSummary items={items} />
-      <ComplianceTable items={items} paidItems={paidItems} onMarkPaid={markPaid} />
+      <ComplianceTable items={items} paidItems={paidItems} onMarkPaid={markPaid} pendingItemId={pendingPaymentId} />
       
       {companyId && <GSTFilingTracker companyId={companyId} />}
     </div>

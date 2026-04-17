@@ -10,9 +10,51 @@ export interface AuthedContext {
   isOwner: boolean
 }
 
+export type CompanyCapability =
+  | 'settings.manage'
+  | 'compliance.manage'
+  | 'members.manage'
+  | 'reports.export'
+
+export function hasCompanyCapability(
+  ctx: Pick<AuthedContext, 'role' | 'isOwner'>,
+  capability: CompanyCapability
+) {
+  if (ctx.isOwner) return true
+
+  switch (capability) {
+    case 'reports.export':
+      return ctx.role === 'editor'
+    case 'settings.manage':
+    case 'compliance.manage':
+    case 'members.manage':
+      return false
+    default:
+      return false
+  }
+}
+
+export function requireCompanyCapability(
+  ctx: Pick<AuthedContext, 'role' | 'isOwner'>,
+  capability: CompanyCapability
+) {
+  if (hasCompanyCapability(ctx, capability)) {
+    return null
+  }
+
+  return NextResponse.json(
+    { error: 'Insufficient permissions for this action' },
+    { status: 403 }
+  )
+}
+
 /**
  * Resolves auth + company isolation for API routes.
  * Returns context on success or a NextResponse error on failure.
+ *
+ * For mutating requests (POST/PUT/PATCH/DELETE), companyId MUST be explicitly
+ * provided via query param or x-company-id header. Missing companyId on a write
+ * returns 400 — we never silently fall back to the primary company on mutations.
  */
 export async function resolveAuthedCompany(
   request: NextRequest
@@ -27,6 +69,16 @@ export async function resolveAuthedCompany(
     request.nextUrl.searchParams.get('companyId') ??
     request.headers.get('x-company-id')
 
+  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+
+  // Require explicit companyId on all mutating requests to prevent wrong-tenant writes
+  if (isMutation && !companyId) {
+    return NextResponse.json(
+      { error: 'companyId is required for this request' },
+      { status: 400 }
+    )
+  }
+
   const access = await resolveCompanyAccessForUser(userId, companyId)
 
   if (!access) {
@@ -36,7 +88,6 @@ export async function resolveAuthedCompany(
     )
   }
 
-  const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
   if (isMutation && access.role === 'viewer' && !access.isOwner) {
     return NextResponse.json(
       { error: 'Insufficient permissions for this action' },

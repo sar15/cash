@@ -123,7 +123,7 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   },
 
   create: async (companyId, data) => {
-    const response = await apiPost<Scenario | { scenario?: Scenario }>('/api/scenarios', { companyId, ...data })
+    const response = await apiPost<Scenario | { scenario?: Scenario }>(`/api/scenarios?companyId=${companyId}`, data)
     const scenario = normalizeScenario(
       'scenario' in (response as { scenario?: Scenario })
         ? (response as { scenario?: Scenario }).scenario ?? {}
@@ -135,7 +135,10 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   },
 
   update: async (id, data) => {
-    const response = await apiPatch<Scenario | { scenario?: Scenario }>(`/api/scenarios/${id}`, data)
+    const scenario = get().scenarios.find((s) => s.id === id)
+    const companyId = scenario?.companyId
+    const url = companyId ? `/api/scenarios/${id}?companyId=${companyId}` : `/api/scenarios/${id}`
+    const response = await apiPatch<Scenario | { scenario?: Scenario }>(url, data)
     const updated = normalizeScenario(
       'scenario' in (response as { scenario?: Scenario })
         ? (response as { scenario?: Scenario }).scenario ?? {}
@@ -149,7 +152,10 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   },
 
   remove: async (id) => {
-    await apiDelete(`/api/scenarios/${id}`)
+    const scenario = get().scenarios.find((s) => s.id === id)
+    const companyId = scenario?.companyId
+    const url = companyId ? `/api/scenarios/${id}?companyId=${companyId}` : `/api/scenarios/${id}`
+    await apiDelete(url)
     set((s) => ({
       scenarios: s.scenarios.filter((sc) => sc.id !== id),
       selectedScenarioId: s.selectedScenarioId === id ? null : s.selectedScenarioId,
@@ -160,16 +166,19 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
   select: (id) => set({ selectedScenarioId: id }),
 
   saveOverrides: async (scenarioId, overrides) => {
+    const scenario = get().scenarios.find((s) => s.id === scenarioId)
+    const companyId = scenario?.companyId
+    const url = companyId
+      ? `/api/scenarios/${scenarioId}?companyId=${companyId}`
+      : `/api/scenarios/${scenarioId}`
+
     const payload = overrides.map((override) => ({
       targetType: 'value_rule' as const,
       targetId: override.accountId,
       config: { adjustmentPct: override.adjustmentPct },
     }))
 
-    const response = await apiPut<{ overrides?: ScenarioOverride[] }>(
-      `/api/scenarios/${scenarioId}`,
-      { overrides: payload }
-    )
+    const response = await apiPut<{ overrides?: ScenarioOverride[] }>(url, { overrides: payload })
     const savedOverrides = (response.overrides ?? payload).map((override) => ({
       ...override,
       config: parseOverrideConfig(override.config),

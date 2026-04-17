@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveAuthedCompany, isErrorResponse } from '@/lib/api/helpers'
+import {
+  resolveAuthedCompany,
+  isErrorResponse,
+  requireCompanyCapability,
+} from '@/lib/api/helpers'
 import { db } from '@/lib/db'
 import { companies } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -32,6 +36,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
+    const capabilityError = requireCompanyCapability(ctx, 'reports.export')
+    if (capabilityError) return capabilityError
 
     const body = await parseJsonBody(request, reportRequestSchema)
     const { periodStart, periodEnd, scenarioId, includeWaterfall, includeScenarios } = body
@@ -64,21 +70,87 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Reconstruct EngineResult from cached JSON
-    let plData: Record<string, unknown> = {}
-    let bsData: Record<string, unknown> = {}
-    let cfData: Record<string, unknown> = {}
-    let complianceData: Record<string, unknown> = {}
-    let metricsData: Record<string, unknown> = {}
+    // Fail closed on stale or in-progress forecasts — never render a report from bad data
+    if (cachedResult.status === 'stale' || cachedResult.status === 'calculating') {
+      return NextResponse.json(
+        {
+          error: 'Forecast is still being calculated. Please wait a moment and try again.',
+          status: cachedResult.status,
+        },
+        { status: 409 }
+      )
+    }
 
-    try { plData = JSON.parse(cachedResult.plData) } catch {}
-    try { bsData = JSON.parse(cachedResult.bsData) } catch {}
-    try { cfData = JSON.parse(cachedResult.cfData) } catch {}
-    try { complianceData = JSON.parse(cachedResult.compliance) } catch {}
-    try { metricsData = JSON.parse(cachedResult.metrics) } catch {}
+    // Reconstruct EngineResult from cached JSON — validate each section strictly
+    let plData: Record<string, unknown>
+    let bsData: Record<string, unknown>
+    let cfData: Record<string, unknown>
+    let complianceData: Record<string, unknown>
+    let metricsData: Record<string, unknown>
 
-    // Reconstruct a minimal EngineResult for the PDF generator
-    const forecastMonths = (metricsData.forecastMonths as string[]) ?? []
+    try {
+      plData = JSON.parse(cachedResult.plData)
+      if (typeof plData !== 'object' || plData === null) throw new Error('plData is not an object')
+    } catch (e) {
+      console.error('[REPORTS_GENERATE] Corrupt plData for company', ctx.companyId, e)
+      return NextResponse.json(
+        { error: 'Forecast data is corrupted. Please regenerate the forecast and try again.' },
+        { status: 422 }
+      )
+    }
+
+    try {
+      bsData = JSON.parse(cachedResult.bsData)
+      if (typeof bsData !== 'object' || bsData === null) throw new Error('bsData is not an object')
+    } catch (e) {
+      console.error('[REPORTS_GENERATE] Corrupt bsData for company', ctx.companyId, e)
+      return NextResponse.json(
+        { error: 'Forecast data is corrupted. Please regenerate the forecast and try again.' },
+        { status: 422 }
+      )
+    }
+
+    try {
+      cfData = JSON.parse(cachedResult.cfData)
+      if (typeof cfData !== 'object' || cfData === null) throw new Error('cfData is not an object')
+    } catch (e) {
+      console.error('[REPORTS_GENERATE] Corrupt cfData for company', ctx.companyId, e)
+      return NextResponse.json(
+        { error: 'Forecast data is corrupted. Please regenerate the forecast and try again.' },
+        { status: 422 }
+      )
+    }
+
+    try {
+      complianceData = JSON.parse(cachedResult.compliance)
+      if (typeof complianceData !== 'object' || complianceData === null) throw new Error('compliance is not an object')
+    } catch (e) {
+      console.error('[REPORTS_GENERATE] Corrupt compliance for company', ctx.companyId, e)
+      return NextResponse.json(
+        { error: 'Forecast data is corrupted. Please regenerate the forecast and try again.' },
+        { status: 422 }
+      )
+    }
+
+    try {
+      metricsData = JSON.parse(cachedResult.metrics)
+      if (typeof metricsData !== 'object' || metricsData === null) throw new Error('metrics is not an object')
+    } catch (e) {
+      console.error('[REPORTS_GENERATE] Corrupt metrics for company', ctx.companyId, e)
+      return NextResponse.json(
+        { error: 'Forecast data is corrupted. Please regenerate the forecast and try again.' },
+        { status: 422 }
+      )
+    }
+
+    // Validate that we have actual forecast months — an empty forecast is not renderable
+    const forecastMonths = (metricsData.forecastMonths as string[] | undefined) ?? []
+    if (forecastMonths.length === 0) {
+      return NextResponse.json(
+        { error: 'Forecast contains no data. Please open the Forecast page to generate a forecast first.' },
+        { status: 422 }
+      )
+    }
     const accountForecasts = (plData.accountForecasts as Record<string, number[]>) ?? {}
     const bsMonths = (bsData.months as Record<string, unknown>[]) ?? []
     const cfMonths = (cfData.months as Record<string, unknown>[]) ?? []

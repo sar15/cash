@@ -113,19 +113,60 @@ export async function checkImportRateLimit(identifier: string): Promise<{ succes
 }
 
 /**
+ * Rate limit for expensive report generation (5/hour per user)
+ */
+export async function checkReportRateLimit(identifier: string): Promise<{ success: boolean }> {
+  if (redis) {
+    try {
+      const limiter = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(5, '1 h'),
+        analytics: true,
+        prefix: 'cashflowiq:report',
+      })
+      const result = await limiter.limit(identifier)
+      return { success: result.success }
+    } catch (error) {
+      console.error('[RateLimit] Upstash error for report:', error)
+    }
+  }
+  const success = inMemoryRateLimit(`report:${identifier}`, 5, 3600000)
+  return { success }
+}
+
+/**
+ * Rate limit for full export (3/hour per user — large payload, expensive query)
+ */
+export async function checkExportRateLimit(identifier: string): Promise<{ success: boolean }> {
+  if (redis) {
+    try {
+      const limiter = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(3, '1 h'),
+        analytics: true,
+        prefix: 'cashflowiq:export',
+      })
+      const result = await limiter.limit(identifier)
+      return { success: result.success }
+    } catch (error) {
+      console.error('[RateLimit] Upstash error for export:', error)
+    }
+  }
+  const success = inMemoryRateLimit(`export:${identifier}`, 3, 3600000)
+  return { success }
+}/**
  * Log error if Redis is not configured in production — in-memory fallback
  * does not work correctly across multiple serverless instances.
  * Set STRICT_PROD_GUARDS=true to fail hard instead of degrading silently.
+ *
+ * For a production-grade deployment, Redis is mandatory. The in-memory fallback
+ * is intentionally left only for local development.
  */
 if (!redis && process.env.NODE_ENV === 'production') {
-  console.error(
-    '[RateLimit] UPSTASH_REDIS_REST_URL not configured. ' +
-    'Falling back to in-memory rate limiting — this will NOT work correctly across multiple serverless instances.'
+  // Always throw in production — rate limiting without Redis is not a real control
+  throw new Error(
+    '[RateLimit] UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set in production. ' +
+    'In-memory rate limiting does not work across serverless instances. ' +
+    'Configure Upstash Redis or set NODE_ENV=development to bypass this check.'
   )
-  if (process.env.STRICT_PROD_GUARDS === 'true') {
-    throw new Error(
-      '[RateLimit] Rate limiting requires Redis in strict production mode. ' +
-      'Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, or unset STRICT_PROD_GUARDS.'
-    )
-  }
 }

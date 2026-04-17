@@ -1,11 +1,14 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, isNotNull } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
 
 export type MemberRole = 'owner' | 'editor' | 'viewer'
 
 export async function getMembersForCompany(companyId: string) {
   return db.query.companyMembers.findMany({
-    where: eq(schema.companyMembers.companyId, companyId),
+    where: and(
+      eq(schema.companyMembers.companyId, companyId),
+      isNotNull(schema.companyMembers.acceptedAt)
+    ),
     orderBy: (m, { asc }) => [asc(m.createdAt)],
   })
 }
@@ -17,43 +20,16 @@ export async function getMemberRole(
   const member = await db.query.companyMembers.findFirst({
     where: and(
       eq(schema.companyMembers.companyId, companyId),
-      eq(schema.companyMembers.clerkUserId, clerkUserId)
+      eq(schema.companyMembers.clerkUserId, clerkUserId),
+      isNotNull(schema.companyMembers.acceptedAt)
     ),
   })
   return (member?.role as MemberRole) ?? null
 }
 
-export async function addMember(
-  companyId: string,
-  clerkUserId: string,
-  role: MemberRole,
-  invitedBy: string,
-  invitedEmail?: string
-) {
-  const [member] = await db
-    .insert(schema.companyMembers)
-    .values({ companyId, clerkUserId, role, invitedBy, invitedEmail, acceptedAt: new Date().toISOString() })
-    .onConflictDoUpdate({
-      target: [schema.companyMembers.companyId, schema.companyMembers.clerkUserId],
-      set: { role },
-    })
-    .returning()
-  return member
-}
-
 export async function removeMember(companyId: string, clerkUserId: string) {
   await db
     .delete(schema.companyMembers)
-    .where(and(
-      eq(schema.companyMembers.companyId, companyId),
-      eq(schema.companyMembers.clerkUserId, clerkUserId)
-    ))
-}
-
-export async function acceptMemberInvite(companyId: string, clerkUserId: string) {
-  await db
-    .update(schema.companyMembers)
-    .set({ acceptedAt: new Date().toISOString() })
     .where(and(
       eq(schema.companyMembers.companyId, companyId),
       eq(schema.companyMembers.clerkUserId, clerkUserId)
@@ -76,7 +52,8 @@ export async function canAccessCompany(
   const member = await db.query.companyMembers.findFirst({
     where: and(
       eq(schema.companyMembers.companyId, companyId),
-      eq(schema.companyMembers.clerkUserId, clerkUserId)
+      eq(schema.companyMembers.clerkUserId, clerkUserId),
+      isNotNull(schema.companyMembers.acceptedAt)
     ),
     columns: { id: true, acceptedAt: true },
   })

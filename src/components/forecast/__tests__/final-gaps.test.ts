@@ -14,13 +14,11 @@ describe('Gap 1 — Forecast URL fix', () => {
   })
 })
 
-
-
-describe('Gap 4 — Member invite acceptedAt fix', () => {
-  it('addMember() sets acceptedAt on insert', () => {
-    const src = readFileSync(join(process.cwd(), 'src/lib/db/queries/company-members.ts'), 'utf-8')
-    // The .values() call must now include acceptedAt
-    expect(src).toContain('acceptedAt: new Date().toISOString()')
+describe('Gap 4 — Member invite flow fix', () => {
+  it('member invites are created from email addresses, not raw Clerk IDs', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/api/companies/[id]/members/route.ts'), 'utf-8')
+    expect(src).toContain('invitedEmail: z.string().email()')
+    expect(src).not.toContain('clerkUserId: z.string().min(1)')
   })
 })
 

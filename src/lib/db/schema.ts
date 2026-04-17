@@ -64,6 +64,7 @@ export const firms = sqliteTable(
     createdAt: text('created_at').default(sql`(datetime('now'))`),
   },
   (table) => [
+    uniqueIndex('idx_firms_owner_unique').on(table.ownerClerkUserId),
     index('idx_firms_owner').on(table.ownerClerkUserId),
   ]
 )
@@ -178,7 +179,11 @@ export const accounts = sqliteTable(
     archivedAt: text('archived_at'), // soft-delete: set to ISO timestamp instead of hard-deleting
     currency: text('currency'), // null = inherits company base currency (INR); set for foreign-currency accounts
   },
-  (table) => [index('idx_accounts_company').on(table.companyId, table.sortOrder)]
+  (table) => [
+    index('idx_accounts_company').on(table.companyId, table.sortOrder),
+    // Prevents duplicate account names per company — guards against concurrent import races
+    uniqueIndex('idx_accounts_company_name').on(table.companyId, table.name),
+  ]
 )
 
 // ============================================================
@@ -495,6 +500,34 @@ export const companyMembers = sqliteTable(
 )
 
 // ============================================================
+// COMPANY INVITES — pending email-based collaboration invites
+// ============================================================
+export const companyInvites = sqliteTable(
+  'company_invites',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    invitedEmail: text('invited_email').notNull(),
+    role: text('role').notNull().default('viewer'),
+    invitedBy: text('invited_by').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    status: text('status').notNull().default('pending'), // 'pending' | 'accepted' | 'revoked' | 'expired'
+    acceptedByClerkUserId: text('accepted_by_clerk_user_id'),
+    acceptedAt: text('accepted_at'),
+    expiresAt: text('expires_at').notNull(),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    uniqueIndex('idx_company_invites_email_unique').on(table.companyId, table.invitedEmail),
+    uniqueIndex('idx_company_invites_token_unique').on(table.tokenHash),
+    index('idx_company_invites_status').on(table.companyId, table.status),
+  ]
+)
+
+// ============================================================
 // COMPLIANCE PAYMENTS — server-side paid status per obligation
 // ============================================================
 export const compliancePayments = sqliteTable('compliance_payments', {
@@ -526,6 +559,22 @@ export const reminderConfig = sqliteTable('reminder_config', {
 })
 
 // ============================================================
+// WEBHOOK DELIVERIES — dedupe external webhook retries
+// ============================================================
+export const webhookDeliveries = sqliteTable(
+  'webhook_deliveries',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    provider: text('provider').notNull(),
+    eventId: text('event_id').notNull(),
+    processedAt: text('processed_at').default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    uniqueIndex('idx_webhook_deliveries_unique').on(table.provider, table.eventId),
+  ]
+)
+
+// ============================================================
 // IDEMPOTENCY KEYS — safe retries for mutation endpoints
 // ============================================================
 export const idempotencyKeys = sqliteTable(
@@ -538,7 +587,10 @@ export const idempotencyKeys = sqliteTable(
     key: text('key').notNull(),
     route: text('route').notNull(),
     method: text('method').notNull(),
-    responseStatus: integer('response_status').notNull(),
+    // 'in_progress' = request is being processed (concurrent replay → 409)
+    // 'completed'   = request finished, responseBody is the cached result
+    status: text('status').notNull().default('in_progress'),
+    responseStatus: integer('response_status').notNull().default(0),
     responseBody: text('response_body').notNull().default('{}'),
     createdAt: text('created_at').default(sql`(datetime('now'))`),
   },
@@ -581,6 +633,7 @@ export const companiesRelations = relations(companies, ({ many, one }) => ({
   auditLog: many(auditLog),
   notifications: many(notifications),
   members: many(companyMembers),
+  invites: many(companyInvites),
   compliancePayments: many(compliancePayments),
   taxRateHistory: many(taxRateHistory),
   accountMappings: many(accountMappings),
@@ -733,12 +786,21 @@ export const companyMembersRelations = relations(companyMembers, ({ one }) => ({
   }),
 }))
 
+export const companyInvitesRelations = relations(companyInvites, ({ one }) => ({
+  company: one(companies, {
+    fields: [companyInvites.companyId],
+    references: [companies.id],
+  }),
+}))
+
 export const reminderConfigRelations = relations(reminderConfig, ({ one }) => ({
   company: one(companies, {
     fields: [reminderConfig.companyId],
     references: [companies.id],
   }),
 }))
+
+export const webhookDeliveriesRelations = relations(webhookDeliveries, () => ({}))
 
 export const compliancePaymentsRelations = relations(compliancePayments, ({ one }) => ({
   company: one(companies, {
@@ -767,4 +829,3 @@ export const accountMappingsRelations = relations(accountMappings, ({ one }) => 
     references: [companies.id],
   }),
 }))
-

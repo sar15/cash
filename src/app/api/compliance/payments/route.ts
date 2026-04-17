@@ -1,7 +1,13 @@
 import { type NextRequest } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { eq } from 'drizzle-orm'
-import { resolveAuthedCompany, isErrorResponse, jsonOk, jsonError } from '@/lib/api/helpers'
+import {
+  resolveAuthedCompany,
+  isErrorResponse,
+  jsonOk,
+  jsonError,
+  requireCompanyCapability,
+} from '@/lib/api/helpers'
 import { db, schema } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
@@ -21,6 +27,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
+    const capabilityError = requireCompanyCapability(ctx, 'compliance.manage')
+    if (capabilityError) return capabilityError
     const { userId } = await auth()
     if (!userId) return jsonError('Unauthorized', 401)
     const body = await request.json() as { obligationId: string }
