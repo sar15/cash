@@ -3,7 +3,7 @@ import { type NextRequest } from 'next/server'
 import { getAccountTree, getAccountsForCompany, upsertAccount } from '@/lib/db/queries/accounts'
 import { createAccountSchema } from '@/lib/db/validation'
 import { handleRouteError, jsonResponse, parseJsonBody } from '@/lib/server/api'
-import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
+import { requireAccessibleCompany, requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 
 const createAccountForCompanySchema = createAccountSchema.omit({ companyId: true })
 
@@ -11,7 +11,8 @@ export async function GET(_request: NextRequest, context: { params: Promise<any>
   try {
     const userId = await requireUserId()
     const { companyId } = await context.params
-    const company = await requireOwnedCompany(userId, companyId)
+    // Use requireAccessibleCompany so team members (editors/viewers) can read COA
+    const company = await requireAccessibleCompany(userId, companyId)
     const [accounts, tree] = await Promise.all([
       getAccountsForCompany(company.id),
       getAccountTree(company.id),

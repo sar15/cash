@@ -174,6 +174,7 @@ export const accounts = sqliteTable(
     isGroup: integer('is_group', { mode: 'boolean' }).default(false),
     sortOrder: integer('sort_order').default(0),
     archivedAt: text('archived_at'), // soft-delete: set to ISO timestamp instead of hard-deleting
+    currency: text('currency'), // null = inherits company base currency (INR); set for foreign-currency accounts
   },
   (table) => [index('idx_accounts_company').on(table.companyId, table.sortOrder)]
 )

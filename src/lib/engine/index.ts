@@ -143,42 +143,52 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
   const accountForecasts: Record<string, number[]> = {}
 
   // 1. EVALUATE VALUE RULES per account
-  accounts.forEach((account) => {
-    if (['Assets', 'Liabilities', 'Equity'].includes(account.category)) return
+  // Multi-pass resolution handles accounts that reference other accounts (e.g. interest on debt).
+  // We run up to 3 passes — in practice 2 passes resolves all standard circular dependencies.
+  const MAX_PASSES = 3
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    accounts.forEach((account) => {
+      if (['Assets', 'Liabilities', 'Equity'].includes(account.category)) return
 
-    const rule = valueRules[account.id]
-    const context = {
-      historicalValues: account.historicalValues,
-      forecastMonths: forecastLength,
-    }
-
-    let forecast: number[]
-
-    if (!rule) {
-      forecast = Array(forecastLength).fill(0)
-    } else {
-      switch (rule.type) {
-        case 'growth':
-          forecast = evaluateGrowth(rule, context)
-          break
-        case 'rolling_avg':
-          forecast = evaluateRollingAvg(rule, context)
-          break
-        case 'direct_entry':
-          forecast = evaluateDirectEntry(rule, context)
-          break
-        case 'same_last_year':
-          forecast = evaluateSameLastYear(rule, context)
-          break
-        default:
-          forecast = Array(forecastLength).fill(0)
+      const rule = valueRules[account.id]
+      const context = {
+        historicalValues: account.historicalValues,
+        forecastMonths: forecastLength,
       }
-    }
 
-    accountForecasts[account.id] = forecast.map((value) =>
-      applyBaselineAdjustment(value, baselineAdjustments[account.id])
-    )
-  })
+      let forecast: number[]
+
+      if (!rule) {
+        // Only fill zeros on first pass — preserve values from previous passes
+        if (pass === 0) {
+          forecast = Array(forecastLength).fill(0)
+        } else {
+          return // keep existing value
+        }
+      } else {
+        switch (rule.type) {
+          case 'growth':
+            forecast = evaluateGrowth(rule, context)
+            break
+          case 'rolling_avg':
+            forecast = evaluateRollingAvg(rule, context)
+            break
+          case 'direct_entry':
+            forecast = evaluateDirectEntry(rule, context)
+            break
+          case 'same_last_year':
+            forecast = evaluateSameLastYear(rule, context)
+            break
+          default:
+            forecast = Array(forecastLength).fill(0)
+        }
+      }
+
+      accountForecasts[account.id] = forecast.map((value) =>
+        applyBaselineAdjustment(value, baselineAdjustments[account.id])
+      )
+    })
+  }
 
   // 2. APPLY TIMING PROFILES → compute cash flows
   const cashInflows: Record<string, number[]> = {}
