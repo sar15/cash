@@ -715,6 +715,21 @@ export function ForecastGrid({
     else if (e.key === 'Escape') setEditingCell(null)
   }, [handleCellBlur])
 
+  // ── Virtualized main table setup ─────────────────────────────────────────
+  // Hooks MUST be declared before any early returns (Rules of Hooks).
+  // The virtualizer is only active for the main table path — drivers and
+  // compareMode render their own non-virtualized tables.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const ROW_HEIGHT = 36 // px — matches py-1.5 + font-size
+  const rows = baselineRows
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  })
+
   // Drivers tab — derived KPIs from engine result
   if (view === 'drivers') {
     return (
@@ -850,21 +865,6 @@ export function ForecastGrid({
       </div>
     )
   }
-
-  const rows = baselineRows
-
-  // ── Virtualized main table ────────────────────────────────────────────────
-  // Virtualizes the row loop so only visible rows are in the DOM.
-  // Fixes the "4GB RAM Lenovo freeze" for large COAs (500+ accounts × 36 months).
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const ROW_HEIGHT = 36 // px — matches py-1.5 + font-size
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 10, // render 10 extra rows above/below viewport
-  })
 
   const virtualRows = virtualizer.getVirtualItems()
   const totalHeight = virtualizer.getTotalSize()
