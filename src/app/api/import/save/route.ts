@@ -7,6 +7,7 @@ import { deleteFile } from '@/lib/storage'
 import { inngest } from '@/lib/inngest/client'
 import { writeAuditLog } from '@/lib/db/queries/audit-log'
 import { createNotification } from '@/lib/db/queries/notifications'
+import { markForecastStale } from '@/lib/db/queries/forecast-results'
 import { handleRouteError, jsonResponse, parseJsonBody, RouteError } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
 import {
@@ -230,9 +231,7 @@ export async function POST(request: NextRequest) {
 
     // Mark forecast stale immediately so UI shows recalculating state
     // (Inngest job will set it back to 'ready' when done)
-    import('@/lib/db/queries/forecast-results').then(({ markForecastStale }) => {
-      markForecastStale(company.id).catch(() => {})
-    }).catch(() => {})
+    markForecastStale(company.id).catch(() => {})
 
     // Audit log + notification (non-blocking)
     writeAuditLog({

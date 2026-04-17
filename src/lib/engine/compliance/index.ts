@@ -65,20 +65,19 @@ interface BuildComplianceForecastInput {
   }
 }
 
-// Salary account resolution: match by standardMapping tag first, then name heuristics.
-// Never falls back to a hardcoded demo ID — returns zeros if no salary account found.
+// Salary account resolution: match by account ID's associated name via accountForecasts keys.
+// Since accountForecasts is keyed by account ID (UUID), we can't match by ID string.
+// The engine/index.ts version (which has access to AccountInput[]) is the authoritative one.
+// This fallback version is only used when salaryForecast is not passed in from the engine.
+// It sums all hire-type micro-forecast lines as the salary forecast.
 function deriveSalaryForecast(
   accountForecasts: Record<string, number[]>,
   periods: string[],
   microForecastItems: ForecastMicroForecastItem[]
 ): number[] {
-  const salaryAccountId = Object.keys(accountForecasts).find((id) =>
-    id.toLowerCase().includes('salary') ||
-    id.toLowerCase().includes('payroll') ||
-    id.toLowerCase().includes('wages')
-  )
-
-  const salaryForecast = [...(accountForecasts[salaryAccountId ?? ''] ?? Array(periods.length).fill(0))]
+  // We don't have account names here — only IDs. Return zeros as base;
+  // hire micro-forecasts will add their salary impact on top.
+  const salaryForecast = Array(periods.length).fill(0) as number[]
 
   microForecastItems
     .filter((item) => item.type === 'hire')
