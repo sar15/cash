@@ -41,7 +41,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
       ].join('; ')
     : [
         "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://clerk.cashflowiq.in https://*.clerk.accounts.dev https://challenges.cloudflare.com`,
+        `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval' https://clerk.cashflowiq.in https://*.clerk.accounts.dev https://challenges.cloudflare.com`,
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data: blob: https://img.clerk.com",
