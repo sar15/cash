@@ -58,6 +58,7 @@ const REQUIRED_TABLES = [
   'compliance_payments', 'reminder_config', 'webhook_deliveries',
   'idempotency_keys', 'account_mappings', 'gst_filings',
   'bank_reconciliations', 'firms', 'firm_members', 'firm_clients',
+  'compliance_tasks', 'communication_logs',
 ]
 
 for (const table of REQUIRED_TABLES) {
@@ -93,6 +94,10 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
     'pf_applicable', 'esi_applicable'],
   tax_rate_history: ['id', 'company_id', 'rate_type', 'rate', 'effective_from',
     'notes', 'created_at'],
+  compliance_tasks: ['id', 'company_id', 'filing_type', 'period_label', 'due_date',
+    'status', 'assigned_to_user_id', 'filed_at', 'arn', 'notes', 'created_at', 'updated_at'],
+  communication_logs: ['id', 'task_id', 'company_id', 'channel', 'direction',
+    'content', 'sent_by_user_id', 'created_at'],
 }
 
 for (const [table, cols] of Object.entries(REQUIRED_COLUMNS)) {
@@ -117,6 +122,7 @@ const REQUIRED_UNIQUE_INDEXES: Record<string, string[]> = {
   forecast_results:    ['idx_forecast_result_stable'],          // ON CONFLICT (company_id, scenario_id)
   idempotency_keys:    ['idx_idempotency_unique'],              // ON CONFLICT (company_id, key, route, method)
   company_members:     ['idx_members_unique'],                  // ON CONFLICT (company_id, clerk_user_id)
+  compliance_tasks:    ['idx_tasks_unique'],                    // ON CONFLICT (company_id, filing_type, period_label)
   company_invites:     ['idx_company_invites_email_unique', 'idx_company_invites_token_unique'],
   account_mappings:    ['idx_account_mappings_unique'],         // ON CONFLICT (company_id, raw_ledger_name)
   bank_reconciliations:['idx_bank_recon_unique'],               // ON CONFLICT (company_id, period)

@@ -829,3 +829,89 @@ export const accountMappingsRelations = relations(accountMappings, ({ one }) => 
     references: [companies.id],
   }),
 }))
+
+// ============================================================
+// COMPLIANCE TASKS — unified workflow table for all filing types
+// Replaces the limited gstFilings table with a generic, extensible schema.
+// Supports: GSTR-1, GSTR-3B, TDS, PF/ESI, Advance Tax, ITR, ROC, etc.
+// ============================================================
+export const complianceTasks = sqliteTable(
+  'compliance_tasks',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    // Filing type — open string for extensibility
+    filingType: text('filing_type').notNull(), // 'GSTR-1' | 'GSTR-3B' | 'TDS' | 'PF/ESI' | 'Advance Tax' | 'ITR' | 'ROC'
+    // Human-readable period label e.g. 'May 2024', 'Q1 24-25', 'FY 2024-25'
+    periodLabel: text('period_label').notNull(),
+    // ISO date YYYY-MM-DD
+    dueDate: text('due_date').notNull(),
+    // CA workflow states
+    // not_started → waiting_on_client → docs_received → processing → pending_otp → filed
+    status: text('status').notNull().default('not_started'),
+    // Which staff member is handling this task
+    assignedTo: text('assigned_to_user_id'),
+    // When it was filed
+    filedAt: text('filed_at'),
+    // Acknowledgement Receipt Number (ARN) from the portal
+    arn: text('arn'),
+    // Optional notes
+    notes: text('notes'),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  },
+  (t) => [
+    index('idx_tasks_company_status').on(t.companyId, t.status),
+    index('idx_tasks_due_date').on(t.dueDate),
+    uniqueIndex('idx_tasks_unique').on(t.companyId, t.filingType, t.periodLabel),
+  ]
+)
+
+// ============================================================
+// COMMUNICATION LOGS — audit trail for all client communications
+// Enables CAs to prove "we asked on the 5th, you sent on the 10th"
+// ============================================================
+export const communicationLogs = sqliteTable(
+  'communication_logs',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    taskId: text('task_id').references(() => complianceTasks.id, { onDelete: 'set null' }),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    // Channel: 'email' | 'system_note' (WhatsApp excluded per product decision)
+    channel: text('channel').notNull(),
+    // Direction: 'outbound' (CA → client) | 'inbound' (client → CA) | 'internal'
+    direction: text('direction').notNull(),
+    // Message content or system note
+    content: text('content').notNull(),
+    // null = automated system; set = staff member who sent it
+    sentBy: text('sent_by_user_id'),
+    createdAt: text('created_at').default(sql`(datetime('now'))`),
+  },
+  (t) => [
+    index('idx_comm_logs_company').on(t.companyId, t.createdAt),
+    index('idx_comm_logs_task').on(t.taskId),
+  ]
+)
+
+export const complianceTasksRelations = relations(complianceTasks, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [complianceTasks.companyId],
+    references: [companies.id],
+  }),
+  communicationLogs: many(communicationLogs),
+}))
+
+export const communicationLogsRelations = relations(communicationLogs, ({ one }) => ({
+  task: one(complianceTasks, {
+    fields: [communicationLogs.taskId],
+    references: [complianceTasks.id],
+  }),
+  company: one(companies, {
+    fields: [communicationLogs.companyId],
+    references: [companies.id],
+  }),
+}))
