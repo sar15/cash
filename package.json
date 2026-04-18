@@ -14,6 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx tsx scripts/apply-migrations.ts",
     "db:check": "npx tsx scripts/check-schema.mts",
+    "db:seed-mappings": "npx tsx scripts/seed-standard-mappings.ts",
     "db:studio": "drizzle-kit studio",
     "seed": "node --loader tsx/esm src/lib/db/seed.ts"
   },

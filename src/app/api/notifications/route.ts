@@ -8,13 +8,25 @@ export async function GET(request: NextRequest) {
     const ctx = await resolveAuthedCompany(request)
     if (isErrorResponse(ctx)) return ctx
 
-    const [notifications, unreadCount] = await Promise.all([
-      getNotifications(ctx.companyId, ctx.userId),
-      getUnreadCount(ctx.companyId, ctx.userId),
+    // Race DB queries against a 8-second timeout to prevent hanging requests
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('DB_TIMEOUT')), 8000)
+    )
+
+    const [notifications, unreadCount] = await Promise.race([
+      Promise.all([
+        getNotifications(ctx.companyId, ctx.userId),
+        getUnreadCount(ctx.companyId, ctx.userId),
+      ]),
+      timeoutPromise,
     ])
 
     return jsonOk({ notifications, unreadCount })
-  } catch {
+  } catch (err) {
+    const isTimeout = err instanceof Error && err.message === 'DB_TIMEOUT'
+    if (isTimeout) {
+      return jsonError('Notifications temporarily unavailable — please retry', 503)
+    }
     return jsonError('Failed to fetch notifications', 500)
   }
 }

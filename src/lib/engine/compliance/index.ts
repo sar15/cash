@@ -11,7 +11,7 @@ import { applyComplianceAdjustments } from './apply'
 import { calculateGSTForecast, type GSTForecastResult } from './gst'
 import { calculatePFESIForecast, type PFESIForecastResult } from './pf-esi'
 import { calculateSalaryTDSForecast, type SalaryTDSForecastResult } from './tds'
-import { mergeComplianceAdjustments, type ComplianceAdjustedMonth } from './types'
+import { mergeComplianceAdjustments, createZeroAdjustment, type ComplianceAdjustedMonth } from './types'
 
 export type ComplianceEventType = 'GST' | 'TDS' | 'Advance Tax' | 'PF' | 'ESI'
 
@@ -269,7 +269,7 @@ export function buildComplianceForecast({
   // FIX audit3 C5: pass raw netIncome (can be negative — losses included)
   const advanceTax = calculateAdvanceTaxForecast({
     periods,
-    projectedProfitBeforeTax: rawIntegrationResults.map((month) => month.pl.netIncome),
+    projectedProfitBeforeTax: rawIntegrationResults.map((month) => month.pl.profitBeforeTax ?? month.pl.netIncome),
     taxRatePct: complianceConfig?.advanceTaxRatePct ?? 25,
   })
 
@@ -291,10 +291,32 @@ export function buildComplianceForecast({
     pfEsi.adjustments
   )
 
+  // Fix 2.3: Compute monthly corporate income tax provision (PBT × taxRate / 12)
+  // and inject into each month's adjustment so apply.ts can wire it into
+  // ThreeWayMonth.pl.taxExpense and ThreeWayMonth.bs.taxPayable.
+  // Only accrue tax on profitable months — losses carry forward but don't create
+  // a negative provision (deferred tax is out of scope for Phase 2).
+  const taxRatePct = complianceConfig?.advanceTaxRatePct ?? 25
+  const corporateTaxAdjustments: typeof adjustments = periods.map((period, i) => {
+    const pbt = rawIntegrationResults[i]?.pl?.profitBeforeTax
+      ?? rawIntegrationResults[i]?.pl?.netIncome
+      ?? 0
+    const provision = pbt > 0 ? Math.round((pbt * taxRatePct) / 100) : 0
+    const adj = createZeroAdjustment(period)
+    adj.corporateTaxProvision = provision
+    return adj
+  })
+
+  const allAdjustments = mergeComplianceAdjustments(
+    periods,
+    adjustments,
+    corporateTaxAdjustments
+  )
+
   const integrationResults = applyComplianceAdjustments({
     periods,
     baseMonths: rawIntegrationResults,
-    adjustments,
+    adjustments: allAdjustments,
   })
 
   const rawEvents = buildEvents(gst, tds, advanceTax, pfEsi)

@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api/client'
+import { isCOGSAccount } from '@/lib/standards/account-classifier'
 
 export interface Account {
   id: string
@@ -58,15 +59,9 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   revenueAccounts: () => filterByType(get().accounts, 'revenue'),
   cogsAccounts: () =>
-    get().accounts.filter(
-      (a) => a.accountType === 'expense' && (a.standardMapping?.startsWith('cogs') ?? false)
-    ),
+    get().accounts.filter((a) => isCOGSAccount(a)),
   expenseAccounts: () =>
-    get().accounts.filter(
-      (a) =>
-        a.accountType === 'expense' &&
-        !(a.standardMapping?.startsWith('cogs') ?? false)
-    ),
+    get().accounts.filter((a) => a.accountType === 'expense' && !isCOGSAccount(a)),
   assetAccounts: () => filterByType(get().accounts, 'asset'),
   liabilityAccounts: () => filterByType(get().accounts, 'liability'),
   equityAccounts: () => filterByType(get().accounts, 'equity'),

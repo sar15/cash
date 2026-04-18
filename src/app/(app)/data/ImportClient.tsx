@@ -261,13 +261,13 @@ export default function ImportClient() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <label className="label-xs">Company name</label>
-                  <input value={companyForm.name} onChange={(e) => setCompanyForm((c) => ({ ...c, name: e.target.value }))}
+                  <label htmlFor="import-company-name" className="label-xs">Company name</label>
+                  <input id="import-company-name" name="company-name" value={companyForm.name} onChange={(e) => setCompanyForm((c) => ({ ...c, name: e.target.value }))}
                     className="surface-input mt-1.5" />
                 </div>
                 <div>
-                  <label className="label-xs">Financial year start</label>
-                  <select value={companyForm.fyStartMonth} onChange={(e) => setCompanyForm((c) => ({ ...c, fyStartMonth: Number(e.target.value) }))}
+                  <label htmlFor="import-fy-start" className="label-xs">Financial year start</label>
+                  <select id="import-fy-start" name="fy-start-month" value={companyForm.fyStartMonth} onChange={(e) => setCompanyForm((c) => ({ ...c, fyStartMonth: Number(e.target.value) }))}
                     className="surface-select mt-1.5">
                     <option value={4}>April (Indian FY)</option>
                     <option value={1}>January</option>
@@ -276,13 +276,13 @@ export default function ImportClient() {
                   </select>
                 </div>
                 <div>
-                  <label className="label-xs">PAN</label>
-                  <input value={companyForm.pan} onChange={(e) => setCompanyForm((c) => ({ ...c, pan: e.target.value.toUpperCase() }))}
+                  <label htmlFor="import-pan" className="label-xs">PAN</label>
+                  <input id="import-pan" name="pan" autoComplete="off" value={companyForm.pan} onChange={(e) => setCompanyForm((c) => ({ ...c, pan: e.target.value.toUpperCase() }))}
                     className="surface-input mt-1.5" />
                 </div>
                 <div>
-                  <label className="label-xs">GSTIN</label>
-                  <input value={companyForm.gstin} onChange={(e) => setCompanyForm((c) => ({ ...c, gstin: e.target.value.toUpperCase() }))}
+                  <label htmlFor="import-gstin" className="label-xs">GSTIN</label>
+                  <input id="import-gstin" name="gstin" autoComplete="off" value={companyForm.gstin} onChange={(e) => setCompanyForm((c) => ({ ...c, gstin: e.target.value.toUpperCase() }))}
                     className="surface-input mt-1.5" />
                 </div>
               </div>

@@ -310,6 +310,8 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="Company Name">
             <input
+              id="settings-company-name"
+              name="company-name"
               type="text"
               value={companyForm.name}
               onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
@@ -318,6 +320,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="Industry">
             <select
+              id="settings-industry"
+              name="industry"
               value={companyForm.industry}
               onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
               className="surface-select"
@@ -333,7 +337,10 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="PAN">
             <input
+              id="settings-pan"
+              name="pan"
               type="text"
+              autoComplete="off"
               value={companyForm.pan}
               onChange={(e) => setCompanyForm({ ...companyForm, pan: e.target.value.toUpperCase() })}
               placeholder="ABCDE1234F"
@@ -343,7 +350,10 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="GSTIN">
             <input
+              id="settings-gstin"
+              name="gstin"
               type="text"
+              autoComplete="off"
               value={companyForm.gstin}
               onChange={(e) => setCompanyForm({ ...companyForm, gstin: e.target.value.toUpperCase() })}
               placeholder="22ABCDE1234F1Z5"
@@ -353,6 +363,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="Financial Year Start">
             <select
+              id="settings-fy-start"
+              name="fy-start-month"
               value={companyForm.fyStartMonth}
               onChange={(e) => setCompanyForm({ ...companyForm, fyStartMonth: parseInt(e.target.value) })}
               className="surface-select"
@@ -365,6 +377,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="Number Format">
             <select
+              id="settings-number-format"
+              name="number-format"
               value={companyForm.numberFormat}
               onChange={(e) => setCompanyForm({ ...companyForm, numberFormat: e.target.value })}
               className="surface-select"
@@ -385,6 +399,8 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField label="GST Rate (%)">
             <input
+              id="settings-gst-rate"
+              name="gst-rate"
               type="number"
               value={complianceForm.gstRate}
               onChange={(e) => setComplianceForm({ ...complianceForm, gstRate: parseFloat(e.target.value) || 0 })}
@@ -393,6 +409,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="ITC Recovery (%)">
             <input
+              id="settings-itc-pct"
+              name="itc-pct"
               type="number"
               value={complianceForm.itcPct}
               onChange={(e) => setComplianceForm({ ...complianceForm, itcPct: parseFloat(e.target.value) || 0 })}
@@ -401,6 +419,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="Supply Type">
             <select
+              id="settings-supply-type"
+              name="supply-type"
               value={complianceForm.supplyType}
               onChange={(e) => setComplianceForm({ ...complianceForm, supplyType: e.target.value as 'intra-state' | 'inter-state' })}
               className="surface-select"
@@ -411,6 +431,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="Income Tax Rate (%)">
             <input
+              id="settings-tax-rate"
+              name="tax-rate"
               type="number"
               value={complianceForm.taxRate}
               onChange={(e) => setComplianceForm({ ...complianceForm, taxRate: parseFloat(e.target.value) || 0 })}
@@ -419,6 +441,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="TDS Rate (%)">
             <input
+              id="settings-tds-rate"
+              name="tds-rate"
               type="number"
               value={complianceForm.tdsRate}
               onChange={(e) => setComplianceForm({ ...complianceForm, tdsRate: parseFloat(e.target.value) || 0 })}
@@ -427,6 +451,8 @@ export default function SettingsPage() {
           </FormField>
           <FormField label="PF Rate (%)">
             <input
+              id="settings-pf-rate"
+              name="pf-rate"
               type="number"
               value={complianceForm.pfRate}
               onChange={(e) => setComplianceForm({ ...complianceForm, pfRate: parseFloat(e.target.value) || 0 })}
@@ -573,6 +599,8 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Invite Email">
               <input
+                id="settings-invite-email"
+                name="invite-email"
                 type="email"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
@@ -583,6 +611,8 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center gap-3">
             <select
+              id="settings-invite-role"
+              name="invite-role"
               value={inviteRole}
               onChange={e => setInviteRole(e.target.value as 'editor' | 'viewer')}
               className="surface-select w-32"

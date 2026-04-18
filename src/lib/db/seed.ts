@@ -37,6 +37,7 @@ async function seed() {
     companyId: company.id,
     name: account.name,
     accountType: account.accountType,
+    standardMapping: account.standardMapping,
     sortOrder: idx,
   }))
 

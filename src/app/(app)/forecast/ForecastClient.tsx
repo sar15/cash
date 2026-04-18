@@ -8,7 +8,7 @@ import { useCompanyContext } from '@/hooks/use-company-context'
 import { useCurrentForecast } from '@/hooks/use-current-forecast'
 import { useActualsStore } from '@/stores/actuals-store'
 import { useMicroForecastStore } from '@/stores/micro-forecast-store'
-import { useAccountsStore, type Account } from '@/stores/accounts-store'
+import { useAccountsStore } from '@/stores/accounts-store'
 import { useCompanyStore } from '@/stores/company-store'
 import { ViewSwitcher, type ViewType } from '@/components/forecast/ViewSwitcher'
 import { ForecastGrid } from '@/components/forecast/ForecastGrid'
@@ -17,7 +17,7 @@ import { BusinessEventsList } from '@/components/forecast/BusinessEventsList'
 import { AccountRuleEditor } from '@/components/forecast/AccountRuleEditor'
 import { SensitivityPanel, type SensitivityParams } from '@/components/forecast/SensitivityPanel'
 import { useForecastConfigStore } from '@/stores/forecast-config-store'
-import { useScenarioStore } from '@/stores/scenario-store'
+import { useScenarioStore, getScenarioAdjustments } from '@/stores/scenario-store'
 import { cn } from '@/lib/utils'
 import { apiPost } from '@/lib/api/client'
 import { runScenarioForecastEngine } from '@/lib/engine/scenarios/engine'
@@ -27,10 +27,11 @@ import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import type { AnyTimingProfileConfig } from '@/lib/engine/timing-profiles/types'
 import { useFormulaStore } from '@/stores/formula-store'
 import { CustomFormulaBuilder } from '@/components/forecast/CustomFormulaBuilder'
+import { accountToEngineCategory } from '@/lib/standards/account-classifier'
 
 export default function ForecastClient() {
   const { companyId, company, isLoading: companyLoading } = useCompanyContext()
-  const { engineResult, forecastMonths, isReady, hasAccounts, accounts } = useCurrentForecast()
+  const { engineResult, forecastMonths, isReady, hasAccounts, accounts, openingBalances } = useCurrentForecast()
   const valueRules = useForecastConfigStore((state) => state.valueRules)
   const updateValueRule = useForecastConfigStore((state) => state.updateValueRule)
   const forecastTimingProfiles = useForecastConfigStore((state) => state.timingProfiles)
@@ -141,13 +142,7 @@ export default function ForecastClient() {
       const adjustedAccounts = accounts.map(acc => ({
         id: acc.id,
         name: acc.name,
-        category: (
-          acc.accountType === 'revenue' ? 'Revenue' :
-          acc.accountType === 'expense' && (acc.standardMapping?.startsWith('cogs') ?? false) ? 'COGS' :
-          acc.accountType === 'expense' ? 'Operating Expenses' :
-          acc.accountType === 'asset' ? 'Assets' :
-          acc.accountType === 'liability' ? 'Liabilities' : 'Equity'
-        ) as 'Revenue' | 'COGS' | 'Operating Expenses' | 'Assets' | 'Liabilities' | 'Equity',
+        category: accountToEngineCategory(acc),
         historicalValues: getHistoricalValues(acc.id),
       }))
       // Apply revenue/expense growth to value rules
@@ -199,38 +194,12 @@ export default function ForecastClient() {
   // Scenario comparison: run engine for each scenario when compare mode is active
   const scenarioResults = useMemo(() => {
     if (!compareMode || scenarios.length === 0 || !engineResult || !companyId) return null
+    if (!openingBalances) return null
 
     // Limit to 3 scenarios max for performance
     const activeScenarios = scenarios.slice(0, 3)
 
-    // Derive opening balances from historical data — use name matching, not hardcoded IDs
-    const deriveOpeningBalances = (accts: Account[], getHist: (id: string) => number[]) => {
-      const latestValue = (account: Account) => {
-        const values = getHist(account.id)
-        return values.length > 0 ? values[values.length - 1] : 0
-      }
-      const matches = (a: Account, tokens: string[]) => {
-        const hay = `${a.name} ${a.standardMapping ?? ''}`.toLowerCase()
-        return tokens.some(t => hay.includes(t))
-      }
-      const sum = (pred: (a: Account) => boolean) =>
-        accts.filter(pred).reduce((s, a) => s + latestValue(a), 0)
-
-      return {
-        cash: sum(a => a.accountType === 'asset' && matches(a, ['cash', 'bank'])),
-        ar: sum(a => a.accountType === 'asset' && matches(a, ['receivable', 'debtor'])),
-        fixedAssets: sum(a => a.accountType === 'asset' && matches(a, ['fixed', 'property', 'plant', 'equipment', 'machine', 'vehicle'])),
-        accDepreciation: Math.abs(sum(a => a.accountType === 'asset' && matches(a, ['depreciation', 'acc dep']))),
-        ap: sum(a => a.accountType === 'liability' && matches(a, ['payable', 'creditor'])),
-        debt: sum(a => a.accountType === 'liability' && matches(a, ['loan', 'debt', 'borrowing', 'od', 'cc'])),
-        equity: sum(a => a.accountType === 'equity' && matches(a, ['capital', 'share'])),
-        retainedEarnings: sum(a => a.accountType === 'equity') - sum(a => a.accountType === 'equity' && matches(a, ['capital', 'share'])),
-      }
-    }
-
-    const openingBalances = deriveOpeningBalances(accounts, getHistoricalValues)
-
-    // Run engine for each scenario
+    // Run engine for each scenario using the same opening balances as the main forecast
     return activeScenarios.map(scenario => ({
       id: scenario.id,
       name: scenario.name,
@@ -250,28 +219,19 @@ export default function ForecastClient() {
             accounts: accounts.map(acc => ({
               id: acc.id,
               name: acc.name,
-              category: (
-                acc.accountType === 'revenue' ? 'Revenue' :
-                acc.accountType === 'expense' && (acc.standardMapping?.startsWith('cogs') ?? false) ? 'COGS' :
-                acc.accountType === 'expense' ? 'Operating Expenses' :
-                acc.accountType === 'asset' ? 'Assets' :
-                acc.accountType === 'liability' ? 'Liabilities' : 'Equity'
-              ) as 'Revenue' | 'COGS' | 'Operating Expenses' | 'Assets' | 'Liabilities' | 'Equity',
+              category: accountToEngineCategory(acc),
               historicalValues: getHistoricalValues(acc.id),
             })),
             forecastMonthLabels: forecastMonths,
+            // Use getScenarioAdjustments — same logic as useCurrentForecast
             scenario: {
               id: scenario.id,
               name: scenario.name,
               description: scenario.description ?? undefined,
-              baselineAdjustments: (scenario.overrides ?? [])
-                .filter(o => o.targetType === 'value_rule' && o.targetId)
-                .map(o => ({
-                  accountId: o.targetId!,
-                  adjustmentPct: typeof (o.config as Record<string, unknown>)?.adjustmentPct === 'number'
-                    ? (o.config as Record<string, unknown>).adjustmentPct as number
-                    : 0,
-                })),
+              baselineAdjustments: getScenarioAdjustments(scenario).map(a => ({
+                accountId: a.accountId,
+                adjustmentPct: a.adjustmentPct,
+              })),
               timingProfileOverrides: [],
               microForecastToggles: [],
             },
@@ -284,11 +244,12 @@ export default function ForecastClient() {
               advanceTaxRatePct: complianceConfig.taxRate ?? 25.17,
               supplyType: complianceConfig.supplyType,
             } : undefined,
+            // Reuse the same opening balances as the main forecast — no divergence
             openingBalances,
           })
       )
     }))
-  }, [compareMode, scenarios, engineResult, companyId, accounts, forecastMonths, valueRules, timingProfiles, microForecastItems, complianceConfig, getHistoricalValues, configRevision, microRevision, scenarioRevision])
+  }, [compareMode, scenarios, engineResult, companyId, accounts, forecastMonths, valueRules, timingProfiles, microForecastItems, complianceConfig, getHistoricalValues, configRevision, microRevision, scenarioRevision, openingBalances])
 
   // Loading
   if (companyLoading || !isReady) {
@@ -339,9 +300,24 @@ export default function ForecastClient() {
   }
 
   const editingAccount = editingAccountId ? accounts.find(a => a.id === editingAccountId) ?? null : null
+  const balanceWarnings = engineResult?.balanceWarnings ?? []
 
   return (
     <div className="flex h-[calc(100vh-56px)] flex-col overflow-hidden bg-white">
+      {/* ── Phase 4: Balance Validation Warning Banner ── */}
+      {balanceWarnings.length > 0 && (
+        <div className="shrink-0 border-b border-[#FDE68A] bg-[#FFFBEB] px-4 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#D97706]">
+              Balance Warning
+            </span>
+            <span className="text-xs text-[#92400E]">
+              {balanceWarnings[0].message}
+              {balanceWarnings.length > 1 && ` (+${balanceWarnings.length - 1} more)`}
+            </span>
+          </div>
+        </div>
+      )}
       {/* ── Topbar ── */}
       <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white px-4">
         {/* Left: view tabs */}

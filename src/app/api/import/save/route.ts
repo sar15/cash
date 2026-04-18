@@ -16,11 +16,13 @@ import {
   getIdempotencyKey,
   toIdempotencyResponse,
 } from '@/lib/server/idempotency'
+import { FALLBACK_BY_ACCOUNT_TYPE, isValidStandardMapping } from '@/lib/standards/standard-mappings'
 
 const importAccountSchema = z.object({
   name: z.string().min(1),
   code: z.string().max(20).optional(),
   accountType: z.enum(['revenue', 'expense', 'asset', 'liability', 'equity']),
+  // Accept any string but validate/fallback at save time — allows legacy values from old imports
   standardMapping: z.string().max(100).optional(),
   parentId: z.string().uuid().nullable().optional(),
   level: z.number().int().min(0).max(4).default(0),
@@ -150,7 +152,10 @@ export async function POST(request: NextRequest) {
             code: a.code,
             name: a.name,
             accountType: a.accountType,
-            standardMapping: a.standardMapping,
+            // Validate standardMapping — use fallback if missing or invalid legacy value
+            standardMapping: isValidStandardMapping(a.standardMapping)
+              ? a.standardMapping
+              : FALLBACK_BY_ACCOUNT_TYPE[a.accountType],
             parentId: a.parentId,
             level: a.level,
             isGroup: a.isGroup,
@@ -184,7 +189,10 @@ export async function POST(request: NextRequest) {
                 code: account.code,
                 name: account.name,
                 accountType: account.accountType,
-                standardMapping: account.standardMapping,
+                // Validate standardMapping on update too
+                standardMapping: isValidStandardMapping(account.standardMapping)
+                  ? account.standardMapping
+                  : FALLBACK_BY_ACCOUNT_TYPE[account.accountType],
                 parentId: account.parentId,
                 level: account.level,
                 isGroup: account.isGroup,

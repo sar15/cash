@@ -16,6 +16,8 @@ export interface ComplianceMonthAdjustment {
   advanceTaxPaid: number;
   pfPaid: number;
   esiPaid: number;
+  /** Monthly corporate income tax provision (PBT × taxRate / 12) — Fix 2.3 */
+  corporateTaxProvision: number;
 }
 
 export interface ComplianceOpeningBalances {
@@ -36,6 +38,8 @@ export interface ComplianceAdjustedMonth extends Omit<ThreeWayMonth, 'bs' | 'cf'
     advanceTaxPaid: number;
     pfPayable: number;
     esiPayable: number;
+    /** Corporate income tax payable (accrued provision) — Fix 2.3 */
+    corporateTaxPayable: number;
   };
   cf: ThreeWayMonth['cf'] & {
     gstPaid: number;
@@ -64,6 +68,7 @@ export function createZeroAdjustment(period: string): ComplianceMonthAdjustment 
     advanceTaxPaid: 0,
     pfPaid: 0,
     esiPaid: 0,
+    corporateTaxProvision: 0,
   };
 }
 
@@ -82,6 +87,7 @@ const ADJUSTMENT_KEYS: Array<keyof Omit<ComplianceMonthAdjustment, 'period'>> = 
   'advanceTaxPaid',
   'pfPaid',
   'esiPaid',
+  'corporateTaxProvision',
 ];
 
 export function mergeComplianceAdjustments(

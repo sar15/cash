@@ -148,10 +148,12 @@ export default function ClientsPage() {
     return { cashPosition, runway }
   })()
 
-  // Mock global data for the pro dashboard design
+  // Real computed metrics from actual company data
   const totalClients = companies.length || 0
-  const clientsAtRisk = totalClients > 0 ? Math.floor(totalClients * 0.2) + 1 : 0
-  const gstDueCount = totalClients > 0 ? Math.floor(totalClients * 0.4) : 0
+  // "At risk" = companies with no forecast data (no accounts imported yet)
+  // This is a proxy until per-client forecast data is available
+  const clientsAtRisk = 0  // Cannot compute without per-client engine runs — show 0 honestly
+  const gstDueCount = 0    // Cannot compute without per-client compliance data — show 0 honestly
 
   return (
     <div className="space-y-6">
@@ -183,13 +185,10 @@ export default function ClientsPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#94A3B8]">Total Clients</p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#0F172A]">{totalClients}</span>
-            <span className="inline-flex items-center rounded bg-[#ECFDF5] px-1.5 py-0.5 text-[10px] font-bold text-[#059669]">
-              ↑ 2 New
-            </span>
           </div>
           <p className="mt-1 text-xs text-[#64748B]">Across multiple industries</p>
           <div className="mt-4 h-1 w-full rounded-full bg-[#E2E8F0] overflow-hidden">
-             <div className="h-full w-3/4 rounded-full bg-[#10B981]" />
+             <div className="h-full rounded-full bg-[#10B981]" style={{ width: totalClients > 0 ? '100%' : '0%' }} />
           </div>
         </div>
 
@@ -198,14 +197,8 @@ export default function ClientsPage() {
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#94A3B8]">At Risk</p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#DC2626]">{clientsAtRisk}</span>
-            <span className="inline-flex items-center rounded bg-[#FEF2F2] px-1.5 py-0.5 text-[10px] font-bold text-[#DC2626]">
-              ↑ 1
-            </span>
           </div>
           <p className="mt-1 text-xs text-[#64748B]">Cash runway &lt; 30 days</p>
-          <div className="mt-4 h-1 w-full rounded-full bg-[#E2E8F0] overflow-hidden">
-             <div className="h-full w-1/4 rounded-full bg-[#DC2626]" />
-          </div>
         </div>
 
         {/* GST DUE THIS WEEK */}
@@ -214,16 +207,20 @@ export default function ClientsPage() {
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-[#0F172A]">{gstDueCount}</span>
           </div>
-          <p className="mt-1 text-xs text-[#64748B]">Action required by 20th</p>
+          <p className="mt-1 text-xs text-[#64748B]">Check Due Dates tab for details</p>
         </div>
 
-        {/* AVG HEALTH SCORE */}
+        {/* ACTIVE COMPANY CASH */}
         <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#94A3B8]">Avg Health Score</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#94A3B8]">Active Company Cash</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-[#10B981]">82<span className="text-sm text-[#94A3B8] font-medium">/100</span></span>
+            <span className="text-2xl font-bold text-[#10B981]">
+              {activeMetrics ? formatAuto(activeMetrics.cashPosition) : '—'}
+            </span>
           </div>
-          <p className="mt-1 text-xs text-[#64748B]">↑ 4 points vs last month</p>
+          <p className="mt-1 text-xs text-[#64748B]">
+            {activeMetrics ? `${activeMetrics.runway.toFixed(1)}mo runway` : 'Import data to see metrics'}
+          </p>
         </div>
       </div>
 
@@ -266,10 +263,8 @@ export default function ClientsPage() {
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-[#F1F5F9] bg-white">
-                   {companies.map((company, index) => {
-                     const isCrit = index < clientsAtRisk
-                     // Use a stable seed based on index to avoid impure Math.random() during render
-                     const runwayDisplay = isCrit ? `${((index % 3) * 0.7 + 0.3).toFixed(1)}m` : '8.4m'
+                   {companies.map((company) => {
+                     const isCrit = false // Cannot determine without per-client forecast data
                      
                      return (
                        <tr key={company.id} className="transition-colors hover:bg-[#F8FAFC]">
@@ -283,13 +278,13 @@ export default function ClientsPage() {
                            </div>
                          </td>
                          <td className="px-5 py-3.5 text-right font-num font-semibold text-[#334155]">
-                            {company.id === activeCompanyId && activeMetrics ? formatAuto(activeMetrics.cashPosition) : `₹${(index % 9) * 10 + 10}.0L`}
+                            {company.id === activeCompanyId && activeMetrics ? formatAuto(activeMetrics.cashPosition) : '—'}
                          </td>
-                         <td className={cn("px-5 py-3.5 text-right font-num font-semibold", isCrit ? "text-[#DC2626]" : "text-[#475569]")}>
-                            {runwayDisplay}
+                         <td className="px-5 py-3.5 text-right font-num font-semibold text-[#475569]">
+                            {company.id === activeCompanyId && activeMetrics ? `${activeMetrics.runway.toFixed(1)}mo` : '—'}
                          </td>
                          <td className="px-5 py-3.5 text-xs text-[#64748B]">
-                            {isCrit ? 'Critical cash buffer' : '—'}
+                            —
                          </td>
                        </tr>
                      )
@@ -306,15 +301,15 @@ export default function ClientsPage() {
           <div className="rounded-xl border border-[#E2E8F0] bg-white shadow-sm p-5">
              <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#64748B] mb-4">Quick Actions</h3>
              <div className="space-y-2.5">
-                <button className="flex w-full items-center gap-3 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC]">
+                <Link href="/due-dates" className="flex w-full items-center gap-3 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC]">
                   <CalendarDays className="h-4 w-4 text-[#94A3B8]" /> Schedule reviews
-                </button>
-                <button className="flex w-full items-center gap-3 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC]">
+                </Link>
+                <Link href="/forecast" className="flex w-full items-center gap-3 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC]">
                   <TrendingUp className="h-4 w-4 text-[#94A3B8]" /> Compare scenarios
-                </button>
-                <button className="flex w-full items-center gap-3 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC]">
+                </Link>
+                <Link href="/reports" className="flex w-full items-center gap-3 rounded-lg border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[#F8FAFC]">
                   <FileText className="h-4 w-4 text-[#94A3B8]" /> Export reports
-                </button>
+                </Link>
              </div>
           </div>
 

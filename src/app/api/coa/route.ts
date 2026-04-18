@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server'
 import { resolveAuthedCompany, isErrorResponse, jsonOk, jsonError, jsonValidationError } from '@/lib/api/helpers'
 import { createAccountSchema, updateAccountSchema } from '@/lib/db/validation'
 import * as accountQueries from '@/lib/db/queries/accounts'
+import { FALLBACK_BY_ACCOUNT_TYPE } from '@/lib/standards/standard-mappings'
 
 // GET /api/coa — List all accounts for company
 export async function GET(request: NextRequest) {
@@ -39,7 +40,9 @@ export async function POST(request: NextRequest) {
       parentId: parsed.data.parentId,
       level: parsed.data.level,
       accountType: parsed.data.accountType,
-      standardMapping: parsed.data.standardMapping,
+      // Apply fallback mapping if not provided — ensures no account has null standardMapping
+      standardMapping: parsed.data.standardMapping
+        ?? FALLBACK_BY_ACCOUNT_TYPE[parsed.data.accountType],
       isGroup: parsed.data.isGroup,
       sortOrder: parsed.data.sortOrder,
     }

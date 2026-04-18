@@ -7,6 +7,7 @@ import type { EngineResult } from '@/lib/engine'
 import type { Account } from '@/stores/accounts-store'
 import type { GSTForecastMonth } from '@/lib/engine/compliance/gst'
 import { nowIST } from '@/lib/utils/ist'
+import { isCOGSAccount } from '@/lib/standards/account-classifier'
 
 export interface ReportParams {
   companyName: string
@@ -198,8 +199,8 @@ export async function generatePDFReport(params: ReportParams): Promise<Buffer> {
   tableHeader(forecastMonths)
 
   const revenueAccounts = accounts.filter(a => a.accountType === 'revenue').sort((a, b) => a.sortOrder - b.sortOrder)
-  const cogsAccounts = accounts.filter(a => a.accountType === 'expense' && (a.standardMapping?.startsWith('cogs') ?? false)).sort((a, b) => a.sortOrder - b.sortOrder)
-  const opexAccounts = accounts.filter(a => a.accountType === 'expense' && !(a.standardMapping?.startsWith('cogs') ?? false)).sort((a, b) => a.sortOrder - b.sortOrder)
+  const cogsAccounts = accounts.filter(a => isCOGSAccount(a)).sort((a, b) => a.sortOrder - b.sortOrder)
+  const opexAccounts = accounts.filter(a => a.accountType === 'expense' && !isCOGSAccount(a)).sort((a, b) => a.sortOrder - b.sortOrder)
 
   const empty = () => Array(forecastMonths.length).fill(0)
   const sum = (vals: number[]) => vals.reduce((s, v) => s + v, 0)

@@ -1,4 +1,20 @@
 import { z } from 'zod'
+import { ALL_STANDARD_MAPPINGS } from '@/lib/standards/standard-mappings'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Standard Mapping validation — runtime enforcement of the taxonomy
+// Accepts any value in ALL_STANDARD_MAPPINGS; rejects unknown strings.
+// Using z.string().refine() instead of z.enum() because the array is large
+// and z.enum() requires a tuple type at compile time.
+// ─────────────────────────────────────────────────────────────────────────────
+const standardMappingSet = new Set<string>(ALL_STANDARD_MAPPINGS)
+
+export const standardMappingSchema = z
+  .string()
+  .refine((v) => standardMappingSet.has(v), {
+    message: 'Invalid standardMapping value — must be a valid Schedule III taxonomy key',
+  })
+  .optional()
 
 // ============================================================
 // COMPANY SCHEMAS
@@ -28,7 +44,7 @@ export const createAccountSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
   level: z.number().int().min(0).max(2).default(0),
   accountType: accountTypeEnum,
-  standardMapping: z.string().max(50).optional(),
+  standardMapping: standardMappingSchema,
   isGroup: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
 })
@@ -179,7 +195,7 @@ export const importSaveSchema = z.object({
     name: z.string().min(1),
     code: z.string().optional(),
     accountType: accountTypeEnum,
-    standardMapping: z.string().optional(),
+    standardMapping: standardMappingSchema,
     parentId: z.string().uuid().nullable().optional(),
   })).min(1),
   actuals: z.array(z.object({

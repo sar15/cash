@@ -247,28 +247,43 @@ export function buildImportTemplateCsv(months = [
       accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Operating Expenses'),
     },
     {
-      comment: '# ASSETS — Balance sheet assets (enter closing balance for each month)',
+      // CRITICAL: These accounts drive the AS 3 Cash Flow working capital calculation.
+      // Keep them separate — do NOT lump them into a single "Assets" row.
+      // Inventory, Trade Receivables, and Short-term Loans & Advances each get their own row.
+      comment: '# ASSETS — Enter CLOSING BALANCE for each month (not movement). IMPORTANT: Keep Inventory, Trade Receivables, GST Receivable, and Prepaid Expenses as separate rows — the Cash Flow engine uses their month-on-month changes to compute Operating Cash Flow.',
       accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Assets'),
     },
     {
-      comment: '# LIABILITIES — Balance sheet liabilities (enter closing balance for each month)',
+      // CRITICAL: Short-term vs Long-term borrowings must be separate rows.
+      // The engine uses this split to correctly classify debt on the Balance Sheet.
+      comment: '# LIABILITIES — Enter CLOSING BALANCE for each month. IMPORTANT: Keep Trade Payables, Short-term Debt (OD/CC), and Long-term Debt (Term Loans) as separate rows — the Cash Flow engine uses their changes to compute Financing Cash Flow.',
       accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Liabilities'),
     },
     {
-      comment: '# EQUITY — Share capital and retained earnings',
+      comment: '# EQUITY — Share capital and retained earnings (enter closing balance)',
       accounts: STANDARD_INDIAN_COA.filter(a => a.category === 'Equity'),
     },
   ]
 
   const header = ['Particulars', ...months].map(escapeCsvCell).join(',')
 
-  // Instructions row
-  const instructions = [
+  // Instructions rows
+  const instructions1 = [
     '# HOW TO USE: Fill in monthly amounts in Indian Rupees. Leave blank if not applicable. Do not change account names.',
     ...months.map(() => ''),
   ].map(escapeCsvCell).join(',')
 
-  const rows: string[] = [header, instructions]
+  const instructions2 = [
+    '# P&L accounts (Revenue, COGS, Expenses): enter the amount for that month only.',
+    ...months.map(() => ''),
+  ].map(escapeCsvCell).join(',')
+
+  const instructions3 = [
+    '# Balance Sheet accounts (Assets, Liabilities, Equity): enter the CLOSING BALANCE as of the last day of that month.',
+    ...months.map(() => ''),
+  ].map(escapeCsvCell).join(',')
+
+  const rows: string[] = [header, instructions1, instructions2, instructions3]
 
   for (const section of sections) {
     // Section comment row

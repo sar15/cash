@@ -230,11 +230,7 @@ async function persistItem(item: MicroForecastItem, sortOrder: number) {
     ...serializeItem(item, sortOrder),
   };
   
-  console.log('[persistItem] Sending payload:', payload);
-  
   const result = await apiPost<ApiMicroForecastCreateResponse>('/api/micro-forecasts', payload);
-  
-  console.log('[persistItem] Received result:', result);
   
   if (!result.forecast) {
     throw new Error('API response missing forecast object');

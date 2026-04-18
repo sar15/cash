@@ -14,7 +14,7 @@ import type { AnyTimingProfileConfig } from './timing-profiles/types'
 import {
   type MonthlyInput,
   type OpeningBalances,
-  runThreeWayIntegration,
+  runThreeWayIntegrationWithWarnings,
   type ThreeWayMonth,
 } from './three-way/builder'
 import { evaluateDirectEntry } from './value-rules/direct-entry'
@@ -68,6 +68,8 @@ export interface EngineResult {
   forecastMonths: string[]
   compliance: ComplianceResult
   salaryForecast: number[]
+  /** Phase 4: balance validation warnings — non-blocking, surface in UI */
+  balanceWarnings: import('./three-way/builder').BalanceWarning[]
 }
 
 // ============================================================
@@ -275,7 +277,8 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
     debt: 0,
   }
 
-  const rawIntegrationResults = runThreeWayIntegration(opening, finalInputs)
+  const { results: rawIntegrationResults, warnings: balanceWarnings } =
+    runThreeWayIntegrationWithWarnings(opening, finalInputs, forecastMonthLabels)
 
   // 6. COMPLIANCE
   const salaryForecast = deriveSalaryForecast(accountForecasts, forecastLength, microForecastItems, accounts)
@@ -289,6 +292,11 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
     complianceConfig,
   })
 
+  // Log warnings in development — non-blocking
+  if (balanceWarnings.length > 0 && process.env.NODE_ENV !== 'production') {
+    console.warn('[Engine] Balance warnings:', balanceWarnings)
+  }
+
   return {
     accountForecasts,
     rawIntegrationResults,
@@ -296,5 +304,6 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
     forecastMonths: forecastMonthLabels,
     compliance,
     salaryForecast,
+    balanceWarnings,
   }
 }

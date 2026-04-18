@@ -200,6 +200,7 @@ function GSTFilingTracker({ companyId }: { companyId: string }) {
   const [filings, setFilings] = useState<GSTFiling[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [markingFiled, setMarkingFiled] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     if (!companyId) return
@@ -219,15 +220,19 @@ function GSTFilingTracker({ companyId }: { companyId: string }) {
       const response = await fetch(`/api/gst-filings/${filingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Company-Id': companyId },
-        body: JSON.stringify({ referenceNumber: '' })
+        body: JSON.stringify({ status: 'filed' })
       })
       if (response.ok) {
         setFilings(prev => prev.map(f => 
           f.id === filingId ? { ...f, status: 'filed', filedAt: new Date().toISOString() } : f
         ))
+      } else {
+        const data = await response.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error ?? 'Failed to mark filing as filed')
       }
     } catch (err) {
-      console.error('Failed to mark filing as filed:', err)
+      // Surface error to user — previously silent
+      alert(err instanceof Error ? err.message : 'Failed to mark filing as filed')
     } finally {
       setMarkingFiled(null)
     }
@@ -296,7 +301,7 @@ function GSTFilingTracker({ companyId }: { companyId: string }) {
       </div>
 
       <div className="space-y-2">
-        {filings.slice(0, 6).map(filing => (
+        {(showAll ? filings : filings.slice(0, 6)).map(filing => (
           <div key={filing.id} className="flex items-center justify-between rounded-lg border border-[#E2E8F0] bg-white p-3 transition-colors hover:border-[#CBD5E1]">
             <div className="flex items-center gap-3">
               <span className={cn(
@@ -344,6 +349,14 @@ function GSTFilingTracker({ companyId }: { companyId: string }) {
           <p className="mt-2 text-sm text-[#94A3B8]">No GST filings found</p>
           <p className="mt-1 text-xs text-[#CBD5E1]">Filings will appear after running forecast</p>
         </div>
+      )}
+      {filings.length > 6 && (
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="mt-2 w-full rounded-lg border border-[#E2E8F0] py-2 text-xs font-medium text-[#64748B] transition-colors hover:border-[#CBD5E1] hover:text-[#0F172A]"
+        >
+          {showAll ? `Show less` : `Show all ${filings.length} filings`}
+        </button>
       )}
     </SurfaceCard>
   )
@@ -445,13 +458,18 @@ export default function CompliancePage() {
     const pfAmount = pfMonth?.employerPF ?? 0
     const esiAmount = (pfMonth?.employerESI ?? 0) + (pfMonth?.employeeESI ?? 0)
     const atQuarters = [5, 8, 11, 2]
-    const isATQuarter = atQuarters.includes(viewMonth)
-    const atAmount = isATQuarter ? (compliance?.advanceTax?.installments?.[atQuarters.indexOf(viewMonth)]?.installmentAmount ?? 0) : 0
+    void atQuarters // kept for reference — engine determines actual installment months
+    // Find the installment whose paymentPeriod matches the viewed period
+    const atInstallment = compliance?.advanceTax?.installments?.find(
+      inst => inst.paymentPeriod === viewedPeriod
+    )
+    const atAmount = atInstallment?.installmentAmount ?? 0
 
     // Get projected cash before each obligation from compliance events
-    const cashBeforeGST = compliance?.events?.find(e => e.type === 'GST' && e.sourcePeriod?.includes(monthLabel))?.projectedCashBefore ?? 0
-    const cashBeforeTDS = compliance?.events?.find(e => e.type === 'TDS' && e.sourcePeriod?.includes(monthLabel))?.projectedCashBefore ?? 0
-    const cashBeforePF = compliance?.events?.find(e => e.type === 'PF')?.projectedCashBefore ?? 0
+    // Events use ISO period format (2025-04-01), match by exact period
+    const cashBeforeGST = compliance?.events?.find(e => e.type === 'GST' && e.sourcePeriod === viewedPeriod)?.projectedCashBefore ?? 0
+    const cashBeforeTDS = compliance?.events?.find(e => e.type === 'TDS' && e.sourcePeriod === viewedPeriod)?.projectedCashBefore ?? 0
+    const cashBeforePF = compliance?.events?.find(e => (e.type === 'PF' || e.type === 'ESI') && e.sourcePeriod === viewedPeriod)?.projectedCashBefore ?? 0
 
     const getStatus = (dueDate: Date) => {
       if (today > dueDate) return 'overdue' as const
@@ -467,8 +485,8 @@ export default function CompliancePage() {
       { id: `esi-${viewMonth}-${viewYear}`, type: 'pf_esi', label: 'ESI Deposit', subLabel: 'Employee + employer ESI', dueDate: fmtDate(new Date(viewYear, viewMonth, 15)), amount: esiAmount, status: getStatus(new Date(viewYear, viewMonth, 15)), cashBefore: cashBeforePF },
     ]
 
-    if (isATQuarter) {
-      result.push({ id: `at-${viewMonth}-${viewYear}`, type: 'advance_tax', label: 'Advance Tax Installment', subLabel: `Q${atQuarters.indexOf(viewMonth) + 1} payment`, dueDate: fmtDate(new Date(viewYear, viewMonth, 15)), amount: atAmount, status: getStatus(new Date(viewYear, viewMonth, 15)), cashBefore: 0 })
+    if (atAmount > 0) {
+      result.push({ id: `at-${viewMonth}-${viewYear}`, type: 'advance_tax', label: 'Advance Tax Installment', subLabel: `Installment due ${fmtDate(new Date(viewYear, viewMonth, 15))}`, dueDate: fmtDate(new Date(viewYear, viewMonth, 15)), amount: atAmount, status: getStatus(new Date(viewYear, viewMonth, 15)), cashBefore: 0 })
     }
 
     return result.filter(i => i.amount > 0)
@@ -490,7 +508,7 @@ export default function CompliancePage() {
       <PageHeader
         eyebrow="Compliance"
         title="Compliance Calendar"
-        description={`GST, TDS, PF/ESI, advance tax — ${company?.name ?? 'company'} · DD/MM/YYYY`}
+        description={`GST, TDS, PF/ESI, advance tax — ${company?.name ?? 'company'}`}
         badges={
           <>
             <HeaderBadge label={`${items.length} obligations`} />

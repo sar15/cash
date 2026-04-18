@@ -7,6 +7,7 @@ import { buildForecastMonthLabels } from '@/lib/forecast-periods'
 import { upsertForecastResult, markForecastCalculating } from '@/lib/db/queries/forecast-results'
 import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import type { AnyTimingProfileConfig } from '@/lib/engine/timing-profiles/types'
+import { accountToEngineCategory } from '@/lib/standards/account-classifier'
 
 // Inngest v4: createFunction takes (options, handler) — trigger is inside options
 export const recomputeForecast = inngest.createFunction(
@@ -60,13 +61,7 @@ export const recomputeForecast = inngest.createFunction(
         return match?.amount ?? 0
       })
 
-      let category: AccountInput['category']
-      if (acc.accountType === 'revenue') category = 'Revenue'
-      else if (acc.accountType === 'expense' && acc.standardMapping?.startsWith('cogs')) category = 'COGS'
-      else if (acc.accountType === 'expense') category = 'Operating Expenses'
-      else if (acc.accountType === 'asset') category = 'Assets'
-      else if (acc.accountType === 'liability') category = 'Liabilities'
-      else category = 'Equity'
+      const category: AccountInput['category'] = accountToEngineCategory({ accountType: acc.accountType, standardMapping: acc.standardMapping })
 
       return { id: acc.id, name: acc.name, category, historicalValues }
     })

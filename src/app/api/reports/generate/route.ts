@@ -13,6 +13,7 @@ import { generatePDFReport } from '@/lib/reports/pdf-generator'
 import type { EngineResult } from '@/lib/engine'
 import type { ComplianceResult } from '@/lib/engine/compliance'
 import type { Account } from '@/stores/accounts-store'
+import { isCOGSAccount } from '@/lib/standards/account-classifier'
 import { parseJsonBody } from '@/lib/server/api'
 import { handleRouteError } from '@/lib/server/api'
 import { z } from 'zod'
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
         if (acc.accountType === 'revenue') {
           integrationResults[i].pl.revenue += v
         } else if (acc.accountType === 'expense') {
-          if (acc.standardMapping?.startsWith('cogs')) {
+          if (isCOGSAccount(acc)) {
             integrationResults[i].pl.cogs += v
           } else {
             integrationResults[i].pl.expense += v
@@ -195,6 +196,7 @@ export async function POST(request: NextRequest) {
       forecastMonths,
       compliance: complianceData as unknown as ComplianceResult,
       salaryForecast: [],
+      balanceWarnings: [],
     }
 
     // Generate PDF

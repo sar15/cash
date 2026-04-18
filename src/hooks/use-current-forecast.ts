@@ -28,90 +28,178 @@ import type { OpeningBalances } from '@/lib/engine/three-way/builder'
 import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import { buildForecastMonthLabels } from '@/lib/forecast-periods'
 import { apiPost } from '@/lib/api/client'
+import { accountToEngineCategory } from '@/lib/standards/account-classifier'
+import {
+  SM_ASSET_CASH,
+  SM_ASSET_TRADE_REC,
+  SM_ASSET_PPE,
+  SM_ASSET_INTANGIBLE,
+  SM_ASSET_INVENTORIES,
+  SM_ASSET_ST_LOANS,
+  SM_ASSET_OTHER_C,
+  SM_LIAB_TRADE_PAY,
+  SM_LIAB_LT_BORROWINGS,
+  SM_LIAB_ST_BORROWINGS,
+  SM_LIAB_OTHER_C,
+  SM_LIAB_ST_PROVISIONS,
+  SM_EQ_SHARE_CAPITAL,
+  SM_EQ_SECURITIES_PREMIUM,
+  SM_EQ_GENERAL_RESERVE,
+} from '@/lib/standards/standard-mappings'
 
 /**
  * Map DB account types to engine categories.
+ * Uses the centralised classifier — single source of truth.
  */
 function accountToEngineInput(
   account: Account,
   historicalValues: number[]
 ): AccountInput {
-  let category: AccountInput['category']
-
-  if (account.accountType === 'revenue') {
-    category = 'Revenue'
-  } else if (
-    account.accountType === 'expense' &&
-    (account.standardMapping?.startsWith('cogs') ?? false)
-  ) {
-    category = 'COGS'
-  } else if (account.accountType === 'expense') {
-    category = 'Operating Expenses'
-  } else if (account.accountType === 'asset') {
-    category = 'Assets'
-  } else if (account.accountType === 'liability') {
-    category = 'Liabilities'
-  } else {
-    category = 'Equity'
-  }
-
   return {
     id: account.id,
     name: account.name,
-    category,
+    category: accountToEngineCategory(account),
     historicalValues,
   }
 }
 
-function deriveOpeningBalances(accounts: Account[], getHistoricalValues: (accountId: string) => number[]): OpeningBalances {
+/**
+ * Derive opening balances from the latest historical actuals.
+ *
+ * Uses standardMapping for precise classification — no name-token guessing.
+ * Falls back to name-token matching for accounts without a standardMapping
+ * (legacy data before Phase 1 migration).
+ */
+function deriveOpeningBalances(
+  accounts: Account[],
+  getHistoricalValues: (accountId: string) => number[]
+): OpeningBalances {
   const latestValue = (account: Account) => {
     const values = getHistoricalValues(account.id)
     return values[values.length - 1] ?? 0
   }
 
-  const matches = (account: Account, tokens: string[]) => {
+  // Name-token fallback for accounts without standardMapping
+  const nameMatches = (account: Account, tokens: string[]) => {
     const haystack = `${account.name} ${account.standardMapping ?? ''}`.toLowerCase()
     return tokens.some((token) => haystack.includes(token))
   }
 
-  const sumLatest = (predicate: (account: Account) => boolean) =>
-    accounts.filter(predicate).reduce((sum, account) => sum + latestValue(account), 0)
+  const sumBySM = (mappings: string[]) =>
+    accounts
+      .filter((a) => a.standardMapping && mappings.includes(a.standardMapping))
+      .reduce((sum, a) => sum + latestValue(a), 0)
 
-  const cash = sumLatest((account) =>
-    account.accountType === 'asset' && matches(account, ['cash', 'bank'])
-  )
-  const ar = sumLatest((account) =>
-    account.accountType === 'asset' && matches(account, ['receivable', 'debtor'])
-  )
-  const ap = sumLatest((account) =>
-    account.accountType === 'liability' && matches(account, ['payable', 'creditor'])
-  )
-  const debt = sumLatest((account) =>
-    account.accountType === 'liability' && matches(account, ['loan', 'debt', 'borrowing', 'od', 'cc'])
-  )
-  const fixedAssets = sumLatest((account) =>
-    account.accountType === 'asset' &&
-    matches(account, ['fixed', 'property', 'plant', 'equipment', 'machine', 'vehicle', 'computer', 'furniture'])
-  )
+  const sumByNameFallback = (
+    accountType: string,
+    tokens: string[],
+    excludeMappings: string[]
+  ) =>
+    accounts
+      .filter(
+        (a) =>
+          a.accountType === accountType &&
+          (!a.standardMapping || !excludeMappings.includes(a.standardMapping)) &&
+          nameMatches(a, tokens)
+      )
+      .reduce((sum, a) => sum + latestValue(a), 0)
+
+  // ── Cash ─────────────────────────────────────────────────────────────────
+  const cash =
+    sumBySM([SM_ASSET_CASH]) ||
+    sumByNameFallback('asset', ['cash', 'bank'], [SM_ASSET_CASH])
+
+  // ── Trade Receivables ─────────────────────────────────────────────────────
+  const ar =
+    sumBySM([SM_ASSET_TRADE_REC]) ||
+    sumByNameFallback('asset', ['receivable', 'debtor'], [SM_ASSET_TRADE_REC])
+
+  // ── Inventories ───────────────────────────────────────────────────────────
+  const inventories =
+    sumBySM([SM_ASSET_INVENTORIES]) ||
+    sumByNameFallback('asset', ['inventory', 'stock', 'closing stock'], [SM_ASSET_INVENTORIES])
+
+  // ── ST Loans & Advances (prepaid, GST ITC, security deposits) ────────────
+  const stLoansAdvances =
+    sumBySM([SM_ASSET_ST_LOANS]) ||
+    sumByNameFallback('asset', ['prepaid', 'advance', 'gst receivable', 'itc'], [SM_ASSET_ST_LOANS])
+
+  // ── Other Current Assets ──────────────────────────────────────────────────
+  const otherCurrentAssets = sumBySM([SM_ASSET_OTHER_C])
+
+  // ── PPE ───────────────────────────────────────────────────────────────────
+  const fixedAssets =
+    sumBySM([SM_ASSET_PPE]) ||
+    sumByNameFallback('asset', ['fixed', 'property', 'plant', 'equipment', 'machine', 'vehicle', 'computer', 'furniture'], [SM_ASSET_PPE])
+
   const accDepreciation = Math.abs(
-    sumLatest((account) =>
-      account.accountType === 'asset' && matches(account, ['depreciation', 'acc dep'])
-    )
+    sumByNameFallback('asset', ['depreciation', 'acc dep'], [])
   )
-  const shareCapital = sumLatest((account) =>
-    account.accountType === 'equity' && matches(account, ['capital', 'share'])
-  )
-  const totalEquity = sumLatest((account) => account.accountType === 'equity')
+
+  // ── Intangibles ───────────────────────────────────────────────────────────
+  // Fix 1.2: intangibles opening balance was always 0 — now correctly derived
+  const intangibles =
+    sumBySM([SM_ASSET_INTANGIBLE]) ||
+    sumByNameFallback('asset', ['intangible', 'software', 'goodwill', 'patent', 'trademark', 'ip', 'brand'], [SM_ASSET_INTANGIBLE])
+
+  // ── Trade Payables ────────────────────────────────────────────────────────
+  const ap =
+    sumBySM([SM_LIAB_TRADE_PAY]) ||
+    sumByNameFallback('liability', ['payable', 'creditor'], [SM_LIAB_TRADE_PAY])
+
+  // ── Borrowings ────────────────────────────────────────────────────────────
+  const ltBorrowings =
+    sumBySM([SM_LIAB_LT_BORROWINGS]) ||
+    sumByNameFallback('liability', ['term loan', 'long term', 'secured loan'], [SM_LIAB_LT_BORROWINGS, SM_LIAB_ST_BORROWINGS])
+
+  const stBorrowings =
+    sumBySM([SM_LIAB_ST_BORROWINGS]) ||
+    sumByNameFallback('liability', ['od', 'overdraft', 'cash credit', 'working capital loan'], [SM_LIAB_LT_BORROWINGS, SM_LIAB_ST_BORROWINGS])
+
+  // Legacy: if no lt/st split, use total debt from name matching
+  const legacyDebt =
+    ltBorrowings === 0 && stBorrowings === 0
+      ? sumByNameFallback('liability', ['loan', 'debt', 'borrowing', 'od', 'cc'], [SM_LIAB_LT_BORROWINGS, SM_LIAB_ST_BORROWINGS])
+      : 0
+
+  // ── Other Current Liabilities ─────────────────────────────────────────────
+  const otherCurrentLiabilities = sumBySM([SM_LIAB_OTHER_C])
+  const stProvisions             = sumBySM([SM_LIAB_ST_PROVISIONS])
+
+  // ── Equity ────────────────────────────────────────────────────────────────
+  const shareCapital =
+    sumBySM([SM_EQ_SHARE_CAPITAL]) ||
+    sumByNameFallback('equity', ['capital', 'share'], [SM_EQ_SHARE_CAPITAL])
+
+  const securitiesPremium = sumBySM([SM_EQ_SECURITIES_PREMIUM])
+  const generalReserve    = sumBySM([SM_EQ_GENERAL_RESERVE])
+
+  const totalEquity = accounts
+    .filter((a) => a.accountType === 'equity')
+    .reduce((sum, a) => sum + latestValue(a), 0)
+
+  const retainedEarnings = totalEquity - shareCapital - securitiesPremium - generalReserve
 
   return {
     cash,
     ar,
     ap,
-    debt,
+    equity: shareCapital,
+    retainedEarnings,
     fixedAssets,
     accDepreciation,
-    equity: shareCapital,
-    retainedEarnings: totalEquity - shareCapital,
+    intangibles,
+    inventories,
+    stLoansAdvances,
+    otherCurrentAssets,
+    ltBorrowings: ltBorrowings + legacyDebt,
+    stBorrowings,
+    otherCurrentLiabilities,
+    stProvisions,
+    securitiesPremium,
+    generalReserve,
+    // Legacy field for backward compat
+    debt: ltBorrowings + stBorrowings + legacyDebt,
   }
 }
 
@@ -159,6 +247,8 @@ export interface ForecastData {
   hasAccounts: boolean
   error: string | null
   accounts: Account[]
+  /** Opening balances derived from historical data — shared with compare mode */
+  openingBalances: OpeningBalances | null
 }
 
 export function useCurrentForecast(): ForecastData {
@@ -193,6 +283,12 @@ export function useCurrentForecast(): ForecastData {
 
   const storesLoading = accountsLoading || actualsLoading || configLoading
 
+  // Compute opening balances once — shared between main engine and compare mode
+  const openingBalances = useMemo(() => {
+    if (!company || accounts.length === 0 || storesLoading) return null
+    return deriveOpeningBalances(accounts, getHistoricalValues)
+  }, [company, accounts, storesLoading, getHistoricalValues])
+
   const engineResult = useMemo(() => {
     if (!company || accounts.length === 0 || storesLoading || actualsVersion < 0) return null
 
@@ -200,7 +296,7 @@ export function useCurrentForecast(): ForecastData {
       const accountInputs: AccountInput[] = accounts.map((acc) =>
         accountToEngineInput(acc, getHistoricalValues(acc.id))
       )
-      const openingBalances = deriveOpeningBalances(accounts, getHistoricalValues)
+      const openingBals = openingBalances ?? deriveOpeningBalances(accounts, getHistoricalValues)
       const effectiveValueRules = buildEffectiveValueRules(
         accounts,
         getHistoricalValues,
@@ -254,7 +350,7 @@ export function useCurrentForecast(): ForecastData {
         valueRules: effectiveValueRules,
         timingProfiles,
         microForecastItems,
-        openingBalances,
+        openingBalances: openingBals,
         complianceConfig: complianceConfig
           ? {
               gstRatePct: complianceConfig.gstRate,
@@ -283,6 +379,7 @@ export function useCurrentForecast(): ForecastData {
     sensitivityIsActive,
     sensitivityRevenueAdjPct,
     sensitivityExpenseAdjPct,
+    openingBalances,
   ])
 
   // Persist result to DB (debounced 800ms) so next load is instant
@@ -321,5 +418,6 @@ export function useCurrentForecast(): ForecastData {
     hasAccounts: accounts.length > 0,
     error: null,
     accounts,
+    openingBalances,
   }
 }

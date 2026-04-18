@@ -13,6 +13,17 @@ import { useFormulaStore } from '@/stores/formula-store'
 import { evaluateFormula } from '@/lib/engine/formula-evaluator'
 import { formatAuto } from '@/lib/utils/indian-format'
 import { CustomFormulaBuilder } from './CustomFormulaBuilder'
+import { isCOGSAccount } from '@/lib/standards/account-classifier'
+import {
+  SM_REV_OTHER_INTEREST,
+  SM_REV_OTHER_DIVIDEND,
+  SM_REV_OTHER_MISC,
+  SM_EXP_EMPLOYEE_BENEFITS,
+  SM_EXP_FINANCE_COSTS,
+  SM_EXP_DEPRECIATION,
+  SM_EXP_AMORTISATION,
+  SM_EXP_EXCEPTIONAL,
+} from '@/lib/standards/standard-mappings'
 
 interface GridRow {
   id: string
@@ -42,151 +53,279 @@ interface ForecastGridProps {
   onCreateFormula?: () => void
 }
 
-function buildPLRows(accounts: Account[], engineResult: EngineResult | null, monthCount: number): GridRow[] {
+// ─────────────────────────────────────────────────────────────────────────────
+// Schedule III P&L Builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildPLRows(
+  accounts: Account[],
+  engineResult: EngineResult | null,
+  monthCount: number
+): GridRow[] {
   const rows: GridRow[] = []
   const forecasts = engineResult?.accountForecasts ?? {}
-  const emptyValues = () => Array(monthCount).fill(0)
+  const raw = engineResult?.rawIntegrationResults ?? []
+  const empty = (): number[] => Array(monthCount).fill(0)
 
-  const addSection = (headerName: string, accountFilter: (a: Account) => boolean, subtotalName?: string) => {
-    rows.push({ id: `header-${headerName}`, name: headerName, type: 'header', values: emptyValues(), total: 0 })
-    // Only include leaf accounts (isGroup=false) to prevent double-counting parent totals
-    const sectionAccounts = accounts.filter(a => accountFilter(a) && !a.isGroup).sort((a, b) => a.sortOrder - b.sortOrder)
-    const sectionTotals = emptyValues()
-    sectionAccounts.forEach((acc) => {
-      const values = forecasts[acc.id] ?? emptyValues()
-      values.forEach((v: number, i: number) => { sectionTotals[i] += v })
-      rows.push({ id: acc.id, name: acc.name, type: 'account', values, total: values.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-    })
-    if (subtotalName) {
-      rows.push({ id: `subtotal-${headerName}`, name: subtotalName, type: 'subtotal', values: sectionTotals, total: sectionTotals.reduce((s, v) => s + v, 0) })
-    }
-    return sectionTotals
+  const sumAccounts = (filter: (a: Account) => boolean): number[] => {
+    const totals = empty()
+    accounts.filter((a) => filter(a) && !a.isGroup).sort((a, b) => a.sortOrder - b.sortOrder)
+      .forEach((acc) => {
+        const vals = forecasts[acc.id] ?? empty()
+        vals.forEach((v: number, i: number) => { totals[i] += v })
+      })
+    return totals
   }
 
-  const revTotals = addSection('Revenue', (a) => a.accountType === 'revenue', 'Total Revenue')
-  const cogsTotals = addSection('Cost of Goods Sold', (a) => a.accountType === 'expense' && (a.standardMapping?.startsWith('cogs') ?? false), 'Total COGS')
-  const grossProfit = revTotals.map((r, i) => r - cogsTotals[i])
-  rows.push({ id: 'gross-profit', name: 'Gross Profit', type: 'total', values: grossProfit, total: grossProfit.reduce((s, v) => s + v, 0) })
-  const opexTotals = addSection('Operating Expenses', (a) => a.accountType === 'expense' && !(a.standardMapping?.startsWith('cogs') ?? false), 'Total OpEx')
-  const ebitda = grossProfit.map((g, i) => g - opexTotals[i])
-  rows.push({ id: 'ebitda', name: 'EBITDA', type: 'subtotal', values: ebitda, total: ebitda.reduce((s, v) => s + v, 0) })
-  // Depreciation from integration results (if available)
-  const depVals = engineResult?.rawIntegrationResults?.map(m => m?.pl?.depreciation ?? 0) ?? Array(monthCount).fill(0)
-  const netIncome = ebitda.map((e, i) => e - depVals[i])
-  rows.push({ id: 'net-income', name: 'Net Income (PAT)', type: 'total', values: netIncome, total: netIncome.reduce((s, v) => s + v, 0) })
+  const addAccountRows = (filter: (a: Account) => boolean): number[] => {
+    const totals = empty()
+    accounts.filter((a) => filter(a) && !a.isGroup).sort((a, b) => a.sortOrder - b.sortOrder)
+      .forEach((acc) => {
+        const vals = forecasts[acc.id] ?? empty()
+        vals.forEach((v: number, i: number) => { totals[i] += v })
+        rows.push({ id: acc.id, name: acc.name, type: 'account', values: vals, total: vals.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+      })
+    return totals
+  }
+
+  const OTHER_INCOME_SM = new Set<string>([SM_REV_OTHER_INTEREST, SM_REV_OTHER_DIVIDEND, SM_REV_OTHER_MISC])
+  const isOtherIncome = (a: Account) => a.accountType === 'revenue' && !!a.standardMapping && OTHER_INCOME_SM.has(a.standardMapping)
+  const isRevFromOps  = (a: Account) => a.accountType === 'revenue' && !isOtherIncome(a)
+
+  // I. Revenue from Operations
+  rows.push({ id: 'header-rev-ops', name: 'I. Revenue from Operations', type: 'header', values: empty(), total: 0 })
+  const revOpsTotals = addAccountRows(isRevFromOps)
+  rows.push({ id: 'rev-ops-total', name: 'Total Revenue from Operations', type: 'subtotal', values: revOpsTotals, total: revOpsTotals.reduce((s, v) => s + v, 0) })
+
+  // II. Other Income
+  rows.push({ id: 'header-other-income', name: 'II. Other Income', type: 'header', values: empty(), total: 0 })
+  const otherIncomeTotals = addAccountRows(isOtherIncome)
+  rows.push({ id: 'other-income-total', name: 'Total Other Income', type: 'subtotal', values: otherIncomeTotals, total: otherIncomeTotals.reduce((s, v) => s + v, 0) })
+
+  // III. Total Revenue
+  const totalRevenue = revOpsTotals.map((v, i) => v + otherIncomeTotals[i])
+  rows.push({ id: 'total-revenue', name: 'III. Total Revenue (I + II)', type: 'total', values: totalRevenue, total: totalRevenue.reduce((s, v) => s + v, 0) })
+
+  // IV. Expenses
+  rows.push({ id: 'header-expenses', name: 'IV. Expenses', type: 'header', values: empty(), total: 0 })
+
+  const cogsTotals = sumAccounts(isCOGSAccount)
+  if (cogsTotals.some((v) => v !== 0)) rows.push({ id: 'exp-cogs', name: '(a)+(b) Cost of Materials / Purchases', type: 'account', values: cogsTotals, total: cogsTotals.reduce((s, v) => s + v, 0), indent: 1 })
+
+  const empTotals = sumAccounts((a) => a.accountType === 'expense' && a.standardMapping === SM_EXP_EMPLOYEE_BENEFITS)
+  if (empTotals.some((v) => v !== 0)) rows.push({ id: 'exp-employee', name: '(d) Employee Benefits Expense', type: 'account', values: empTotals, total: empTotals.reduce((s, v) => s + v, 0), indent: 1 })
+
+  const finTotals = sumAccounts((a) => a.accountType === 'expense' && a.standardMapping === SM_EXP_FINANCE_COSTS)
+  if (finTotals.some((v) => v !== 0)) rows.push({ id: 'exp-finance', name: '(e) Finance Costs', type: 'account', values: finTotals, total: finTotals.reduce((s, v) => s + v, 0), indent: 1 })
+
+  const depAcct = sumAccounts((a) => a.accountType === 'expense' && (a.standardMapping === SM_EXP_DEPRECIATION || a.standardMapping === SM_EXP_AMORTISATION))
+  const engineDep = raw.map((m) => (m?.pl?.depreciation ?? 0) + (m?.pl?.amortisation ?? 0))
+  const depFinal = depAcct.some((v) => v !== 0) ? depAcct : engineDep
+  if (depFinal.some((v) => v !== 0)) rows.push({ id: 'exp-dep', name: '(f) Depreciation & Amortisation', type: 'account', values: depFinal, total: depFinal.reduce((s, v) => s + v, 0), indent: 1 })
+
+  const otherExpTotals = sumAccounts((a) =>
+    a.accountType === 'expense' && !isCOGSAccount(a) &&
+    a.standardMapping !== SM_EXP_EMPLOYEE_BENEFITS && a.standardMapping !== SM_EXP_FINANCE_COSTS &&
+    a.standardMapping !== SM_EXP_DEPRECIATION && a.standardMapping !== SM_EXP_AMORTISATION &&
+    a.standardMapping !== SM_EXP_EXCEPTIONAL
+  )
+  if (otherExpTotals.some((v) => v !== 0)) rows.push({ id: 'exp-other', name: '(g) Other Expenses', type: 'account', values: otherExpTotals, total: otherExpTotals.reduce((s, v) => s + v, 0), indent: 1 })
+
+  const totalExpenses = cogsTotals.map((v, i) => v + empTotals[i] + finTotals[i] + depFinal[i] + otherExpTotals[i])
+  rows.push({ id: 'total-expenses', name: 'V. Total Expenses', type: 'subtotal', values: totalExpenses, total: totalExpenses.reduce((s, v) => s + v, 0) })
+
+  // VI. Profit Before Exceptional Items & Tax
+  const pbe = totalRevenue.map((v, i) => v - totalExpenses[i])
+  rows.push({ id: 'profit-before-exceptional', name: 'VI. Profit Before Exceptional Items & Tax', type: 'total', values: pbe, total: pbe.reduce((s, v) => s + v, 0) })
+
+  // VII. Exceptional Items
+  const exceptTotals = sumAccounts((a) => a.accountType === 'expense' && a.standardMapping === SM_EXP_EXCEPTIONAL)
+  if (exceptTotals.some((v) => v !== 0)) rows.push({ id: 'exceptional', name: 'VII. Exceptional Items', type: 'account', values: exceptTotals, total: exceptTotals.reduce((s, v) => s + v, 0), indent: 0 })
+
+  // VIII. Profit Before Tax
+  const pbt = pbe.map((v, i) => v - exceptTotals[i])
+  rows.push({ id: 'profit-before-tax', name: 'VIII. Profit Before Tax', type: 'total', values: pbt, total: pbt.reduce((s, v) => s + v, 0) })
+
+  // IX. Tax Expense
+  const taxExp = raw.map((m) => m?.pl?.taxExpense ?? 0)
+  if (taxExp.some((v) => v !== 0)) rows.push({ id: 'tax-expense', name: 'IX. Tax Expense', type: 'account', values: taxExp, total: taxExp.reduce((s, v) => s + v, 0), indent: 1 })
+
+  // X. Profit After Tax
+  const pat = pbt.map((v, i) => v - taxExp[i])
+  rows.push({ id: 'profit-after-tax', name: 'X. Profit After Tax (PAT)', type: 'total', values: pat, total: pat.reduce((s, v) => s + v, 0) })
+
   return rows
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schedule III Balance Sheet Builder
+// ─────────────────────────────────────────────────────────────────────────────
 
 function buildBSRows(engineResult: EngineResult | null, monthCount: number): GridRow[] {
   const rows: GridRow[] = []
+  const raw = engineResult?.rawIntegrationResults ?? []
   const integration = engineResult?.integrationResults ?? []
-  const emptyValues = () => Array(monthCount).fill(0)
+  const empty = (): number[] => Array(monthCount).fill(0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extract = (key: string) => integration.map((m: any) => m?.bs?.[key] ?? 0)
+  const extractRaw = (key: string) => raw.map((m: any) => m?.bs?.[key] ?? 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extractAdj = (key: string) => integration.map((m: any) => m?.bs?.[key] ?? 0)
 
-  rows.push({ id: 'header-assets', name: 'Assets', type: 'header', values: emptyValues(), total: 0 })
-  const cashVals = extract('cash'); rows.push({ id: 'bs-cash', name: 'Cash & Bank', type: 'account', values: cashVals, total: cashVals[cashVals.length - 1] ?? 0, indent: 1 })
-  const arVals = extract('ar'); rows.push({ id: 'bs-ar', name: 'Accounts Receivable', type: 'account', values: arVals, total: arVals[arVals.length - 1] ?? 0, indent: 1 })
-  const faVals = extract('fixedAssets'); rows.push({ id: 'bs-fa', name: 'Fixed Assets', type: 'account', values: faVals, total: faVals[faVals.length - 1] ?? 0, indent: 1 })
-  const depVals = extract('accDepreciation'); rows.push({ id: 'bs-dep', name: '(Acc. Depreciation)', type: 'account', values: depVals.map((v: number) => -v), total: -(depVals[depVals.length - 1] ?? 0), indent: 1 })
-  const totalAssets = extract('totalAssets'); rows.push({ id: 'bs-total-assets', name: 'Total Assets', type: 'total', values: totalAssets, total: totalAssets[totalAssets.length - 1] ?? 0 })
+  const hdr  = (id: string, name: string) => rows.push({ id, name, type: 'header', values: empty(), total: 0 })
+  const acct = (id: string, name: string, vals: number[], indent = 1) => rows.push({ id, name, type: 'account', values: vals, total: vals[vals.length - 1] ?? 0, indent })
+  const sub  = (id: string, name: string, vals: number[]) => rows.push({ id, name, type: 'subtotal', values: vals, total: vals[vals.length - 1] ?? 0 })
+  const tot  = (id: string, name: string, vals: number[]) => rows.push({ id, name, type: 'total', values: vals, total: vals[vals.length - 1] ?? 0 })
 
-  rows.push({ id: 'header-liab', name: 'Liabilities', type: 'header', values: emptyValues(), total: 0 })
-  const apVals = extract('ap'); rows.push({ id: 'bs-ap', name: 'Accounts Payable', type: 'account', values: apVals, total: apVals[apVals.length - 1] ?? 0, indent: 1 })
-  const debtVals = extract('debt'); rows.push({ id: 'bs-debt', name: 'Debt', type: 'account', values: debtVals, total: debtVals[debtVals.length - 1] ?? 0, indent: 1 })
-  const totalLiab = extract('totalLiabilities'); rows.push({ id: 'bs-total-liab', name: 'Total Liabilities', type: 'subtotal', values: totalLiab, total: totalLiab[totalLiab.length - 1] ?? 0 })
+  // ── EQUITY & LIABILITIES ──────────────────────────────────────────────────
+  hdr('header-equity-liab', 'EQUITY & LIABILITIES')
 
-  rows.push({ id: 'header-equity', name: 'Equity', type: 'header', values: emptyValues(), total: 0 })
-  const equityVals = extract('equity'); rows.push({ id: 'bs-equity', name: 'Share Capital', type: 'account', values: equityVals, total: equityVals[equityVals.length - 1] ?? 0, indent: 1 })
-  const reVals = extract('retainedEarnings'); rows.push({ id: 'bs-re', name: 'Retained Earnings', type: 'account', values: reVals, total: reVals[reVals.length - 1] ?? 0, indent: 1 })
-  const totalEquity = extract('totalEquity'); rows.push({ id: 'bs-total-equity', name: 'Total Equity', type: 'total', values: totalEquity, total: totalEquity[totalEquity.length - 1] ?? 0 })
+  hdr('header-equity', "Shareholders' Funds")
+  acct('bs-share-capital', 'Share Capital', extractRaw('shareCapital'))
+  const secPrem = extractRaw('securitiesPremium')
+  if (secPrem.some((v) => v !== 0)) acct('bs-sec-prem', 'Securities Premium Reserve', secPrem)
+  const genRes = extractRaw('generalReserve')
+  if (genRes.some((v) => v !== 0)) acct('bs-gen-res', 'General Reserve', genRes)
+  acct('bs-retained', 'Retained Earnings (P&L Balance)', extractRaw('retainedEarnings'))
+  sub('bs-total-equity', "Total Shareholders' Funds", extractRaw('totalShareholdersEquity'))
+
+  hdr('header-nc-liab', 'Non-Current Liabilities')
+  const ltBorrow = extractRaw('ltBorrowings')
+  if (ltBorrow.some((v) => v !== 0)) acct('bs-lt-borrow', 'Long-term Borrowings', ltBorrow)
+  sub('bs-total-nc-liab', 'Total Non-Current Liabilities', extractRaw('totalNonCurrentLiabilities'))
+
+  hdr('header-curr-liab', 'Current Liabilities')
+  const stBorrow = extractRaw('stBorrowings')
+  if (stBorrow.some((v) => v !== 0)) acct('bs-st-borrow', 'Short-term Borrowings', stBorrow)
+  acct('bs-trade-pay', 'Trade Payables', extractRaw('ap'))
+  const gstPay = extractAdj('gstPayable')
+  if (gstPay.some((v) => v !== 0)) acct('bs-gst-pay', 'GST Payable', gstPay)
+  const tdsPay = extractAdj('tdsPayable')
+  if (tdsPay.some((v) => v !== 0)) acct('bs-tds-pay', 'TDS Payable', tdsPay)
+  const otherCL = extractRaw('otherCurrentLiabilities')
+  if (otherCL.some((v) => v !== 0)) acct('bs-other-cl', 'Other Current Liabilities', otherCL)
+  const stProv = extractRaw('stProvisions')
+  if (stProv.some((v) => v !== 0)) acct('bs-st-prov', 'Short-term Provisions', stProv)
+  sub('bs-total-curr-liab', 'Total Current Liabilities', extractRaw('totalCurrentLiabilities'))
+
+  const totalEqLiab = extractRaw('totalShareholdersEquity').map((v, i) =>
+    v + (extractRaw('totalNonCurrentLiabilities')[i] ?? 0) + (extractRaw('totalCurrentLiabilities')[i] ?? 0)
+  )
+  tot('bs-total-eq-liab', 'Total Equity & Liabilities', totalEqLiab)
+
+  // ── ASSETS ────────────────────────────────────────────────────────────────
+  hdr('header-assets', 'ASSETS')
+
+  hdr('header-nc-assets', 'Non-Current Assets')
+  acct('bs-net-ppe', 'Property, Plant & Equipment (Net)', extractRaw('netPPE'))
+  const netIntang = extractRaw('netIntangibles')
+  if (netIntang.some((v) => v !== 0)) acct('bs-net-intang', 'Intangible Assets (Net)', netIntang)
+  sub('bs-total-nca', 'Total Non-Current Assets', extractRaw('totalNonCurrentAssets'))
+
+  hdr('header-curr-assets', 'Current Assets')
+  const inv = extractRaw('inventories')
+  if (inv.some((v) => v !== 0)) acct('bs-inv', 'Inventories', inv)
+  acct('bs-trade-rec', 'Trade Receivables', extractRaw('tradeReceivables'))
+  const gstRec = extractAdj('gstReceivable')
+  if (gstRec.some((v) => v !== 0)) acct('bs-gst-rec', 'GST Receivable (ITC)', gstRec)
+  const stLoans = extractRaw('stLoansAdvances')
+  if (stLoans.some((v) => v !== 0)) acct('bs-st-loans', 'Short-term Loans & Advances', stLoans)
+  const otherCA = extractRaw('otherCurrentAssets')
+  if (otherCA.some((v) => v !== 0)) acct('bs-other-ca', 'Other Current Assets', otherCA)
+  acct('bs-cash', 'Cash & Cash Equivalents', extractRaw('cash'))
+  sub('bs-total-ca', 'Total Current Assets', extractRaw('totalCurrentAssets'))
+
+  tot('bs-total-assets', 'Total Assets', extractRaw('totalAssets'))
+
   return rows
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AS 3 Cash Flow Builder (Indirect Method)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function buildCFRows(engineResult: EngineResult | null, monthCount: number): GridRow[] {
   const rows: GridRow[] = []
-  const integration = engineResult?.integrationResults ?? []
   const raw = engineResult?.rawIntegrationResults ?? []
-  const emptyValues = () => Array(monthCount).fill(0)
+  const integration = engineResult?.integrationResults ?? []
+  const empty = (): number[] => Array(monthCount).fill(0)
+
+  const extractRaw = (path: string): number[] => {
+    const keys = path.split('.')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return raw.map((m: any) => {
+      let v: unknown = m
+      for (const k of keys) v = (v as Record<string, unknown>)?.[k]
+      return typeof v === 'number' ? v : 0
+    })
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extract = (key: string) => integration.map((m: any) => m?.cf?.[key] ?? 0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extractIndirect = (key: string) => integration.map((m: any) => m?.cf?.indirect?.[key] ?? 0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extractBS = (key: string) => raw.map((m: any) => m?.bs?.[key] ?? 0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extractPL = (key: string) => raw.map((m: any) => m?.pl?.[key] ?? 0)
+  const extractAdj = (key: string): number[] => integration.map((m: any) => m?.cf?.[key] ?? 0)
 
-  // ── Opening Cash ─────────────────────────────────────────
-  const cashVals = extractBS('cash')
-  const ocfVals = extract('operatingCashFlow')
-  const icfVals = extract('investingCashFlow')
-  const fcfVals = extract('financingCashFlow')
-  const netCFVals = extract('netCashFlow')
+  const hdr  = (id: string, name: string) => rows.push({ id, name, type: 'header', values: empty(), total: 0 })
+  const acct = (id: string, name: string, vals: number[], indent = 1) => rows.push({ id, name, type: 'account', values: vals, total: vals.reduce((s, v) => s + v, 0), indent })
+  const sub  = (id: string, name: string, vals: number[]) => rows.push({ id, name, type: 'subtotal', values: vals, total: vals.reduce((s, v) => s + v, 0) })
+  const tot  = (id: string, name: string, vals: number[]) => rows.push({ id, name, type: 'total', values: vals, total: vals.reduce((s, v) => s + v, 0) })
 
-  // Opening cash = closing cash of prior month (shift by 1)
-  const openingCash = cashVals.map((_, i) => {
-    if (i === 0) return cashVals[0] - netCFVals[0]
-    return cashVals[i - 1]
-  })
+  // Opening Cash
+  sub('cf-opening', 'Opening Cash Balance', extractRaw('cf.openingCash'))
 
-  rows.push({ id: 'cf-opening', name: 'Opening Cash Balance', type: 'subtotal', values: openingCash, total: openingCash[0] ?? 0 })
+  // A. Operating Activities
+  hdr('header-ocf', 'A. Cash Flow from Operating Activities')
+  acct('cf-pbt', 'Net Profit Before Tax', extractRaw('cf.operatingIndirect.profitBeforeTax'))
+  const dep = extractRaw('cf.operatingIndirect.addDepreciation')
+  if (dep.some((v) => v !== 0)) acct('cf-dep', 'Add: Depreciation', dep)
+  const amort = extractRaw('cf.operatingIndirect.addAmortisation')
+  if (amort.some((v) => v !== 0)) acct('cf-amort', 'Add: Amortisation', amort)
+  const finCosts = extractRaw('cf.operatingIndirect.addFinanceCosts')
+  if (finCosts.some((v) => v !== 0)) acct('cf-fin-costs', 'Add: Finance Costs', finCosts)
+  const otherInc = extractRaw('cf.operatingIndirect.lessOtherIncome')
+  if (otherInc.some((v) => v !== 0)) acct('cf-other-inc', 'Less: Other Income', otherInc)
+  const chgInv = extractRaw('cf.operatingIndirect.changeInInventories')
+  if (chgInv.some((v) => v !== 0)) acct('cf-inv', '(Increase)/Decrease in Inventories', chgInv)
+  acct('cf-ar', '(Increase)/Decrease in Trade Receivables', extractRaw('cf.operatingIndirect.changeInTradeReceivables'))
+  const chgSTL = extractRaw('cf.operatingIndirect.changeInSTLoansAdvances')
+  if (chgSTL.some((v) => v !== 0)) acct('cf-st-loans', '(Increase)/Decrease in Loans & Advances', chgSTL)
+  const chgOCA = extractRaw('cf.operatingIndirect.changeInOtherCurrentAssets')
+  if (chgOCA.some((v) => v !== 0)) acct('cf-other-ca', '(Increase)/Decrease in Other Current Assets', chgOCA)
+  acct('cf-ap', 'Increase/(Decrease) in Trade Payables', extractRaw('cf.operatingIndirect.changeInTradePayables'))
+  const chgOCL = extractRaw('cf.operatingIndirect.changeInOtherCurrentLiabilities')
+  if (chgOCL.some((v) => v !== 0)) acct('cf-other-cl', 'Increase/(Decrease) in Other Current Liabilities', chgOCL)
+  const gstPaid = extractAdj('gstPaid')
+  if (gstPaid.some((v) => v !== 0)) acct('cf-gst', 'GST Paid', gstPaid.map((v) => -Math.abs(v)))
+  const tdsPaid = extractAdj('tdsPaid')
+  if (tdsPaid.some((v) => v !== 0)) acct('cf-tds', 'TDS Paid', tdsPaid.map((v) => -Math.abs(v)))
+  sub('cf-cash-from-ops', 'Cash Generated from Operations', extractRaw('cf.operatingIndirect.cashFromOperations'))
+  const taxPaid = extractRaw('cf.operatingIndirect.lessIncomeTaxPaid')
+  if (taxPaid.some((v) => v !== 0)) acct('cf-tax-paid', 'Less: Income Tax Paid', taxPaid)
+  tot('cf-net-ocf', 'A. Net Cash from Operating Activities', extractRaw('cf.netOperatingCF'))
 
-  // ── Operating Activities ─────────────────────────────────
-  rows.push({ id: 'header-ocf', name: 'Operating Activities', type: 'header', values: emptyValues(), total: 0 })
+  // B. Investing Activities
+  hdr('header-icf', 'B. Cash Flow from Investing Activities')
+  const capex = extractRaw('cf.purchaseOfPPE')
+  if (capex.some((v) => v !== 0)) acct('cf-capex', 'Purchase of PPE', capex)
+  const intCapex = extractRaw('cf.purchaseOfIntangibles')
+  if (intCapex.some((v) => v !== 0)) acct('cf-int-capex', 'Purchase of Intangibles', intCapex)
+  const assetSale = extractRaw('cf.proceedsFromAssetSale')
+  if (assetSale.some((v) => v !== 0)) acct('cf-asset-sale', 'Proceeds from Sale of Assets', assetSale)
+  tot('cf-net-icf', 'B. Net Cash from Investing Activities', extractRaw('cf.netInvestingCF'))
 
-  const ni = extractIndirect('netIncome')
-  rows.push({ id: 'cf-ni', name: 'Net Income', type: 'account', values: ni, total: ni.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+  // C. Financing Activities
+  hdr('header-fcf', 'C. Cash Flow from Financing Activities')
+  const borrow = extractRaw('cf.proceedsFromBorrowings')
+  if (borrow.some((v) => v !== 0)) acct('cf-borrow', 'Proceeds from Borrowings', borrow)
+  const repay = extractRaw('cf.repaymentOfBorrowings')
+  if (repay.some((v) => v !== 0)) acct('cf-repay', 'Repayment of Borrowings', repay)
+  const finPaid = extractRaw('cf.financeCostsPaid')
+  if (finPaid.some((v) => v !== 0)) acct('cf-fin-paid', 'Finance Costs Paid', finPaid)
+  const divPaid = extractRaw('cf.dividendsPaid')
+  if (divPaid.some((v) => v !== 0)) acct('cf-div', 'Dividends Paid', divPaid)
+  const shareIssue = extractRaw('cf.proceedsFromShareIssue')
+  if (shareIssue.some((v) => v !== 0)) acct('cf-share-issue', 'Proceeds from Issue of Shares', shareIssue)
+  tot('cf-net-fcf', 'C. Net Cash from Financing Activities', extractRaw('cf.netFinancingCF'))
 
-  const dep = extractIndirect('depreciation')
-  rows.push({ id: 'cf-dep', name: 'Add: Depreciation & Amortisation', type: 'account', values: dep, total: dep.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-
-  const ar = extractIndirect('changeInAR')
-  rows.push({ id: 'cf-ar', name: '(Increase)/Decrease in Receivables', type: 'account', values: ar, total: ar.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-
-  const ap = extractIndirect('changeInAP')
-  rows.push({ id: 'cf-ap', name: 'Increase/(Decrease) in Payables', type: 'account', values: ap, total: ap.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-
-  rows.push({ id: 'cf-ocf', name: 'Net Cash from Operations', type: 'subtotal', values: ocfVals, total: ocfVals.reduce((s: number, v: number) => s + v, 0) })
-
-  // ── Investing Activities ─────────────────────────────────
-  rows.push({ id: 'header-icf', name: 'Investing Activities', type: 'header', values: emptyValues(), total: 0 })
-
-  // Capital expenditure = negative of investing CF (when negative)
-  const capex = icfVals.map(v => v < 0 ? v : 0)
-  rows.push({ id: 'cf-capex', name: 'Capital Expenditure', type: 'account', values: capex, total: capex.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-
-  rows.push({ id: 'cf-icf', name: 'Net Cash from Investing', type: 'subtotal', values: icfVals, total: icfVals.reduce((s: number, v: number) => s + v, 0) })
-
-  // ── Free Cash Flow (OCF − CapEx) ─────────────────────────
-  const freeCF = ocfVals.map((v, i) => v + icfVals[i])
-  rows.push({ id: 'cf-fcf-derived', name: 'Free Cash Flow (OCF − CapEx)', type: 'total', values: freeCF, total: freeCF.reduce((s: number, v: number) => s + v, 0) })
-
-  // ── Financing Activities ─────────────────────────────────
-  rows.push({ id: 'header-ffcf', name: 'Financing Activities', type: 'header', values: emptyValues(), total: 0 })
-
-  // Debt raised = positive financing CF
-  const debtRaised = fcfVals.map(v => v > 0 ? v : 0)
-  rows.push({ id: 'cf-debt-raised', name: 'Debt Raised', type: 'account', values: debtRaised, total: debtRaised.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-
-  // Debt repaid = negative financing CF
-  const debtRepaid = fcfVals.map(v => v < 0 ? v : 0)
-  rows.push({ id: 'cf-debt-repaid', name: 'Debt Repaid', type: 'account', values: debtRepaid, total: debtRepaid.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-
-  rows.push({ id: 'cf-fcf', name: 'Net Cash from Financing', type: 'subtotal', values: fcfVals, total: fcfVals.reduce((s: number, v: number) => s + v, 0) })
-
-  // ── Net Change & Closing ─────────────────────────────────
-  rows.push({ id: 'cf-net', name: 'Net Change in Cash', type: 'total', values: netCFVals, total: netCFVals.reduce((s: number, v: number) => s + v, 0) })
-  rows.push({ id: 'cf-closing', name: 'Closing Cash Balance', type: 'total', values: cashVals, total: cashVals[cashVals.length - 1] ?? 0 })
-
-  // ── Key Ratios ───────────────────────────────────────────
-  // Note: Cash flow ratios are shown in the Drivers view (KPI tab)
-  // Here we just add a summary line for quick reference
-  const grossProfit = extractPL('grossProfit')
-  rows.push({ id: 'header-summary', name: 'Cash Flow Summary', type: 'header', values: emptyValues(), total: 0 })
-  rows.push({ id: 'cf-gross-profit', name: 'Gross Profit (from P&L)', type: 'account', values: grossProfit, total: grossProfit.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-  rows.push({ id: 'cf-ocf-ref', name: 'Operating Cash Flow', type: 'account', values: ocfVals, total: ocfVals.reduce((s: number, v: number) => s + v, 0), indent: 1 })
-  rows.push({ id: 'cf-fcf-ref', name: 'Free Cash Flow', type: 'account', values: freeCF, total: freeCF.reduce((s: number, v: number) => s + v, 0), indent: 1 })
+  // Net Change & Closing
+  tot('cf-net-change', 'Net Increase/(Decrease) in Cash (A+B+C)', extractRaw('cf.netCashFlow'))
+  tot('cf-closing', 'Closing Cash & Cash Equivalents', extractRaw('cf.closingCash'))
 
   return rows
 }
@@ -298,83 +437,119 @@ const DriversView = memo(function DriversView({
   const [editingFormulaId, setEditingFormulaId] = useState<string | null>(null)
   const metrics = useMemo((): DriverMetric[] => {
     if (!engineResult) return []
-    const results = engineResult.integrationResults
-    const raw = engineResult.rawIntegrationResults    // Gross Margin %
-    const grossMarginPct: (number | null)[] = results.map(m => {
-      const rev = m.pl.revenue
-      if (rev === 0) return null
-      return ((rev - m.pl.cogs) / rev) * 100
+    const raw = engineResult.rawIntegrationResults
+
+    // ── EBITDA = PBT + Finance Costs + Depreciation + Amortisation ───────────
+    // Derived from Schedule III fields (Phase 3 migration)
+    const ebitda: (number | null)[] = raw.map(m => {
+      const pbt = m?.pl?.profitBeforeTax ?? m?.pl?.netIncome ?? 0
+      const finCosts = m?.pl?.financeCosts ?? 0
+      const dep = m?.pl?.depreciation ?? 0
+      const amort = m?.pl?.amortisation ?? 0
+      return pbt + finCosts + dep + amort
     })
 
-    // Net Margin %
-    const netMarginPct: (number | null)[] = results.map(m => {
-      const rev = m.pl.revenue
-      if (rev === 0) return null
-      return (m.pl.netIncome / rev) * 100
+    // ── EBITDA Margin % = EBITDA / Revenue from Operations ───────────────────
+    const ebitdaMarginPct: (number | null)[] = raw.map((m, i) => {
+      const revOps = m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0
+      if (revOps === 0) return null
+      const e = ebitda[i]
+      if (e === null) return null
+      return (e / revOps) * 100
     })
 
-    // Operating Cash Conversion (OCF / Revenue)
-    const cashConversion: (number | null)[] = results.map(m => {
-      const rev = m.pl.revenue
-      if (rev === 0) return null
-      return (m.cf.operatingCashFlow / rev) * 100
+    // ── Gross Margin % = Gross Profit / Revenue from Operations ──────────────
+    // Uses revenueFromOps (Schedule III Line I) not total revenue
+    const grossMarginPct: (number | null)[] = raw.map(m => {
+      const revOps = m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0
+      if (revOps === 0) return null
+      return (m.pl.grossProfit / revOps) * 100
     })
 
-    // AR Days (AR / Revenue * 30)
+    // ── Net Margin % = PAT / Total Revenue ───────────────────────────────────
+    // Uses profitAfterTax (Schedule III Line X) and totalRevenue (Line III)
+    const netMarginPct: (number | null)[] = raw.map(m => {
+      const totalRev = m?.pl?.totalRevenue ?? m?.pl?.revenue ?? 0
+      if (totalRev === 0) return null
+      const pat = m?.pl?.profitAfterTax ?? m?.pl?.netIncome ?? 0
+      return (pat / totalRev) * 100
+    })
+
+    // ── Operating Cash Conversion (OCF / Revenue from Operations) ────────────
+    const cashConversion: (number | null)[] = raw.map(m => {
+      const revOps = m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0
+      if (revOps === 0) return null
+      const ocf = m?.cf?.netOperatingCF ?? m?.cf?.operatingCashFlow ?? 0
+      return (ocf / revOps) * 100
+    })
+
+    // ── AR Days (Trade Receivables / Revenue from Ops * 30) ──────────────────
     const arDays: (number | null)[] = raw.map(m => {
-      const rev = m.pl.revenue
-      if (rev === 0) return null
-      return (m.bs.ar / rev) * 30
+      const revOps = m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0
+      if (revOps === 0) return null
+      const ar = m?.bs?.tradeReceivables ?? m?.bs?.ar ?? 0
+      return (ar / revOps) * 30
     })
 
-    // AP Days (AP / (COGS + Expense) * 30)
+    // ── AP Days (Trade Payables / (COGS + Expense) * 30) ─────────────────────
     const apDays: (number | null)[] = raw.map(m => {
       const costs = m.pl.cogs + m.pl.expense
       if (costs === 0) return null
-      return (m.bs.ap / costs) * 30
+      const ap = m?.bs?.ap ?? 0
+      return (ap / costs) * 30
     })
 
-    // Working Capital Days (AR Days - AP Days)
+    // ── Working Capital Days (AR Days - AP Days) ──────────────────────────────
     const wcDays: (number | null)[] = arDays.map((ar, i) => {
       const ap = apDays[i]
       if (ar === null || ap === null) return null
       return ar - ap
     })
 
-    // Burn Rate (monthly cash outflows when OCF is negative, in rupees)
-    const burnRate: (number | null)[] = results.map(m => {
-      const ocf = m.cf.operatingCashFlow
+    // ── Burn Rate (monthly cash burn when OCF < 0, in rupees) ────────────────
+    const burnRate: (number | null)[] = raw.map(m => {
+      const ocf = m?.cf?.netOperatingCF ?? m?.cf?.operatingCashFlow ?? 0
       return ocf < 0 ? Math.abs(ocf) / 100 : null
     })
 
-    // Revenue Growth MoM %
-    const revGrowth: (number | null)[] = results.map((m, i) => {
+    // ── Revenue Growth MoM % ─────────────────────────────────────────────────
+    const revGrowth: (number | null)[] = raw.map((m, i) => {
       if (i === 0) return null
-      const prev = results[i - 1].pl.revenue
+      const prev = raw[i - 1]?.pl?.revenueFromOps ?? raw[i - 1]?.pl?.revenue ?? 0
       if (prev === 0) return null
-      return ((m.pl.revenue - prev) / prev) * 100
+      const curr = m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0
+      return ((curr - prev) / prev) * 100
     })
 
-    // Expense Ratio (Total Expenses / Revenue)
-    const expenseRatio: (number | null)[] = results.map(m => {
-      const rev = m.pl.revenue
-      if (rev === 0) return null
-      return ((m.pl.cogs + m.pl.expense) / rev) * 100
+    // ── Expense Ratio (Total Expenses / Total Revenue) ────────────────────────
+    const expenseRatio: (number | null)[] = raw.map(m => {
+      const totalRev = m?.pl?.totalRevenue ?? m?.pl?.revenue ?? 0
+      if (totalRev === 0) return null
+      const totalExp = m?.pl?.totalExpenses ?? (m.pl.cogs + m.pl.expense)
+      return (totalExp / totalRev) * 100
     })
 
     return [
       {
+        id: 'ebitda-margin',
+        label: 'EBITDA Margin',
+        sublabel: 'EBITDA / Revenue from Operations',
+        values: ebitdaMarginPct,
+        format: formatPct,
+        tone: (v) => v >= 20 ? 'green' : v >= 10 ? 'neutral' : 'red',
+      },
+      {
         id: 'gross-margin',
         label: 'Gross Margin',
-        sublabel: '(Revenue − COGS) / Revenue',
+        sublabel: '(Rev from Ops − COGS) / Rev from Ops',
         values: grossMarginPct,
         format: formatPct,
         tone: (v) => v >= 40 ? 'green' : v >= 20 ? 'neutral' : 'red',
       },
       {
         id: 'net-margin',
-        label: 'Net Margin',
-        sublabel: 'Net Income / Revenue',
+        label: 'Net Margin (PAT)',
+        sublabel: 'Profit After Tax / Total Revenue',
         values: netMarginPct,
         format: formatPct,
         tone: (v) => v > 0 ? 'green' : 'red',
@@ -382,7 +557,7 @@ const DriversView = memo(function DriversView({
       {
         id: 'cash-conversion',
         label: 'Cash Conversion',
-        sublabel: 'Operating CF / Revenue',
+        sublabel: 'Operating CF / Revenue from Ops',
         values: cashConversion,
         format: formatPct,
         tone: (v) => v > 0 ? 'green' : 'red',
@@ -398,7 +573,7 @@ const DriversView = memo(function DriversView({
       {
         id: 'expense-ratio',
         label: 'Expense Ratio',
-        sublabel: 'Total Costs / Revenue',
+        sublabel: 'Total Expenses / Total Revenue',
         values: expenseRatio,
         format: formatPct,
         tone: (v) => v < 70 ? 'green' : v < 90 ? 'neutral' : 'red',

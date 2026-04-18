@@ -20,6 +20,7 @@ import type { AccountInput } from '@/lib/engine'
 import { cn } from '@/lib/utils'
 import { formatAuto } from '@/lib/utils/indian-format'
 import { HeaderBadge, PageHeader, SurfaceCard } from '@/components/shared/page-header'
+import { accountToEngineCategory } from '@/lib/standards/account-classifier'
 
 function CreateScenarioModal({ onSave, onClose }: { onSave: (name: string, description: string) => void; onClose: () => void }) {
   const [name, setName] = useState('')
@@ -161,12 +162,7 @@ function ScenarioCompareChart({ scenarios, months }: { scenarios: Scenario[]; mo
     const accountInputs: AccountInput[] = accounts.map((acc) => ({
       id: acc.id,
       name: acc.name,
-      category: acc.accountType === 'revenue' ? 'Revenue'
-        : acc.accountType === 'expense' && (acc.standardMapping?.startsWith('cogs') ?? false) ? 'COGS'
-        : acc.accountType === 'expense' ? 'Operating Expenses'
-        : acc.accountType === 'asset' ? 'Assets'
-        : acc.accountType === 'liability' ? 'Liabilities'
-        : 'Equity' as AccountInput['category'],
+      category: accountToEngineCategory(acc),
       historicalValues: getHistoricalValues(acc.id),
     }))
 

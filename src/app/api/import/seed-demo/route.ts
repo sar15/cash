@@ -5,6 +5,20 @@ import { z } from 'zod'
 import { db, schema } from '@/lib/db'
 import { handleRouteError, jsonResponse, parseJsonBody } from '@/lib/server/api'
 import { requireOwnedCompany, requireUserId } from '@/lib/server/auth'
+import {
+  SM_REV_OPS_PRODUCTS,
+  SM_REV_OPS_SERVICES,
+  SM_EXP_MATERIALS,
+  SM_EXP_EMPLOYEE_BENEFITS,
+  SM_EXP_OTHER,
+  SM_ASSET_CASH,
+  SM_ASSET_TRADE_REC,
+  SM_ASSET_PPE,
+  SM_LIAB_TRADE_PAY,
+  SM_LIAB_LT_BORROWINGS,
+  SM_EQ_SHARE_CAPITAL,
+  SM_EQ_RETAINED_EARNINGS,
+} from '@/lib/standards/standard-mappings'
 
 const requestSchema = z.object({
   companyId: z.string().uuid(),
@@ -17,21 +31,21 @@ const requestSchema = z.object({
 const L = 10_000_000 // 1 lakh in paise
 
 const DEMO_ACCOUNTS = [
-  { name: 'Product Sales',       accountType: 'revenue'   as const, standardMapping: 'revenue.product',    level: 0, isGroup: false, sortOrder: 10 },
-  { name: 'Service Revenue',     accountType: 'revenue'   as const, standardMapping: 'revenue.service',    level: 0, isGroup: false, sortOrder: 11 },
-  { name: 'Raw Materials',       accountType: 'expense'   as const, standardMapping: 'cogs.materials',     level: 0, isGroup: false, sortOrder: 20 },
-  { name: 'Direct Labour',       accountType: 'expense'   as const, standardMapping: 'cogs.labour',        level: 0, isGroup: false, sortOrder: 21 },
-  { name: 'Salaries & Wages',    accountType: 'expense'   as const, standardMapping: 'opex.salaries',      level: 0, isGroup: false, sortOrder: 30 },
-  { name: 'Rent',                accountType: 'expense'   as const, standardMapping: 'opex.rent',          level: 0, isGroup: false, sortOrder: 31 },
-  { name: 'Utilities',           accountType: 'expense'   as const, standardMapping: 'opex.utilities',     level: 0, isGroup: false, sortOrder: 32 },
-  { name: 'Marketing',           accountType: 'expense'   as const, standardMapping: 'opex.marketing',     level: 0, isGroup: false, sortOrder: 33 },
-  { name: 'Cash & Bank',         accountType: 'asset'     as const, standardMapping: 'asset.cash',         level: 0, isGroup: false, sortOrder: 40 },
-  { name: 'Accounts Receivable', accountType: 'asset'     as const, standardMapping: 'asset.receivable',   level: 0, isGroup: false, sortOrder: 41 },
-  { name: 'Fixed Assets',        accountType: 'asset'     as const, standardMapping: 'asset.fixed',        level: 0, isGroup: false, sortOrder: 42 },
-  { name: 'Accounts Payable',    accountType: 'liability' as const, standardMapping: 'liability.payable',  level: 0, isGroup: false, sortOrder: 50 },
-  { name: 'Bank Loan',           accountType: 'liability' as const, standardMapping: 'liability.loan',     level: 0, isGroup: false, sortOrder: 51 },
-  { name: 'Share Capital',       accountType: 'equity'    as const, standardMapping: 'equity.capital',     level: 0, isGroup: false, sortOrder: 60 },
-  { name: 'Retained Earnings',   accountType: 'equity'    as const, standardMapping: 'equity.retained',    level: 0, isGroup: false, sortOrder: 61 },
+  { name: 'Product Sales',       accountType: 'revenue'   as const, standardMapping: SM_REV_OPS_PRODUCTS,      level: 0, isGroup: false, sortOrder: 10 },
+  { name: 'Service Revenue',     accountType: 'revenue'   as const, standardMapping: SM_REV_OPS_SERVICES,      level: 0, isGroup: false, sortOrder: 11 },
+  { name: 'Raw Materials',       accountType: 'expense'   as const, standardMapping: SM_EXP_MATERIALS,         level: 0, isGroup: false, sortOrder: 20 },
+  { name: 'Direct Labour',       accountType: 'expense'   as const, standardMapping: SM_EXP_EMPLOYEE_BENEFITS, level: 0, isGroup: false, sortOrder: 21 },
+  { name: 'Salaries & Wages',    accountType: 'expense'   as const, standardMapping: SM_EXP_EMPLOYEE_BENEFITS, level: 0, isGroup: false, sortOrder: 30 },
+  { name: 'Rent',                accountType: 'expense'   as const, standardMapping: SM_EXP_OTHER,             level: 0, isGroup: false, sortOrder: 31 },
+  { name: 'Utilities',           accountType: 'expense'   as const, standardMapping: SM_EXP_OTHER,             level: 0, isGroup: false, sortOrder: 32 },
+  { name: 'Marketing',           accountType: 'expense'   as const, standardMapping: SM_EXP_OTHER,             level: 0, isGroup: false, sortOrder: 33 },
+  { name: 'Cash & Bank',         accountType: 'asset'     as const, standardMapping: SM_ASSET_CASH,            level: 0, isGroup: false, sortOrder: 40 },
+  { name: 'Accounts Receivable', accountType: 'asset'     as const, standardMapping: SM_ASSET_TRADE_REC,       level: 0, isGroup: false, sortOrder: 41 },
+  { name: 'Fixed Assets',        accountType: 'asset'     as const, standardMapping: SM_ASSET_PPE,             level: 0, isGroup: false, sortOrder: 42 },
+  { name: 'Accounts Payable',    accountType: 'liability' as const, standardMapping: SM_LIAB_TRADE_PAY,        level: 0, isGroup: false, sortOrder: 50 },
+  { name: 'Bank Loan',           accountType: 'liability' as const, standardMapping: SM_LIAB_LT_BORROWINGS,    level: 0, isGroup: false, sortOrder: 51 },
+  { name: 'Share Capital',       accountType: 'equity'    as const, standardMapping: SM_EQ_SHARE_CAPITAL,      level: 0, isGroup: false, sortOrder: 60 },
+  { name: 'Retained Earnings',   accountType: 'equity'    as const, standardMapping: SM_EQ_RETAINED_EARNINGS,  level: 0, isGroup: false, sortOrder: 61 },
 ]
 
 // 12 months: Apr-24 to Mar-25
