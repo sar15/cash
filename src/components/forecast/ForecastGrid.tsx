@@ -67,6 +67,17 @@ function buildPLRows(
   const raw = engineResult?.rawIntegrationResults ?? []
   const empty = (): number[] => Array(monthCount).fill(0)
 
+  // Engine totals from rawIntegrationResults — these INCLUDE micro-forecast overlays
+  // (hire salary, asset depreciation, loan interest) that don't appear in accountForecasts
+  const engineRevenue   = raw.map(m => m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0)
+  const engineOtherInc  = raw.map(m => m?.pl?.otherIncome ?? 0)
+  const engineTotalRev  = raw.map(m => m?.pl?.totalRevenue ?? (m?.pl?.revenue ?? 0))
+  const engineTotalExp  = raw.map(m => m?.pl?.totalExpenses ?? (m?.pl?.cogs ?? 0) + (m?.pl?.expense ?? 0))
+  const enginePBT       = raw.map(m => m?.pl?.profitBeforeTax ?? m?.pl?.netIncome ?? 0)
+  const engineTaxExp    = raw.map(m => m?.pl?.taxExpense ?? 0)
+  const enginePAT       = raw.map(m => m?.pl?.profitAfterTax ?? m?.pl?.netIncome ?? 0)
+  const engineDep       = raw.map(m => (m?.pl?.depreciation ?? 0) + (m?.pl?.amortisation ?? 0))
+
   const sumAccounts = (filter: (a: Account) => boolean): number[] => {
     const totals = empty()
     accounts.filter((a) => filter(a) && !a.isGroup).sort((a, b) => a.sortOrder - b.sortOrder)
@@ -92,21 +103,21 @@ function buildPLRows(
   const isOtherIncome = (a: Account) => a.accountType === 'revenue' && !!a.standardMapping && OTHER_INCOME_SM.has(a.standardMapping)
   const isRevFromOps  = (a: Account) => a.accountType === 'revenue' && !isOtherIncome(a)
 
-  // I. Revenue from Operations
+  // I. Revenue from Operations — account rows + engine total (includes micro-forecast revenue)
   rows.push({ id: 'header-rev-ops', name: 'I. Revenue from Operations', type: 'header', values: empty(), total: 0 })
-  const revOpsTotals = addAccountRows(isRevFromOps)
-  rows.push({ id: 'rev-ops-total', name: 'Total Revenue from Operations', type: 'subtotal', values: revOpsTotals, total: revOpsTotals.reduce((s, v) => s + v, 0) })
+  addAccountRows(isRevFromOps)
+  // Use engine total so micro-forecast revenue events are included
+  rows.push({ id: 'rev-ops-total', name: 'Total Revenue from Operations', type: 'subtotal', values: engineRevenue, total: engineRevenue.reduce((s, v) => s + v, 0) })
 
   // II. Other Income
   rows.push({ id: 'header-other-income', name: 'II. Other Income', type: 'header', values: empty(), total: 0 })
-  const otherIncomeTotals = addAccountRows(isOtherIncome)
-  rows.push({ id: 'other-income-total', name: 'Total Other Income', type: 'subtotal', values: otherIncomeTotals, total: otherIncomeTotals.reduce((s, v) => s + v, 0) })
+  addAccountRows(isOtherIncome)
+  rows.push({ id: 'other-income-total', name: 'Total Other Income', type: 'subtotal', values: engineOtherInc, total: engineOtherInc.reduce((s, v) => s + v, 0) })
 
-  // III. Total Revenue
-  const totalRevenue = revOpsTotals.map((v, i) => v + otherIncomeTotals[i])
-  rows.push({ id: 'total-revenue', name: 'III. Total Revenue (I + II)', type: 'total', values: totalRevenue, total: totalRevenue.reduce((s, v) => s + v, 0) })
+  // III. Total Revenue — always from engine (includes all micro-forecast impacts)
+  rows.push({ id: 'total-revenue', name: 'III. Total Revenue (I + II)', type: 'total', values: engineTotalRev, total: engineTotalRev.reduce((s, v) => s + v, 0) })
 
-  // IV. Expenses
+  // IV. Expenses — account rows for breakdown, engine totals for summary lines
   rows.push({ id: 'header-expenses', name: 'IV. Expenses', type: 'header', values: empty(), total: 0 })
 
   const cogsTotals = sumAccounts(isCOGSAccount)
@@ -118,8 +129,8 @@ function buildPLRows(
   const finTotals = sumAccounts((a) => a.accountType === 'expense' && a.standardMapping === SM_EXP_FINANCE_COSTS)
   if (finTotals.some((v) => v !== 0)) rows.push({ id: 'exp-finance', name: '(e) Finance Costs', type: 'account', values: finTotals, total: finTotals.reduce((s, v) => s + v, 0), indent: 1 })
 
+  // Depreciation — use engine values (includes asset micro-forecast depreciation)
   const depAcct = sumAccounts((a) => a.accountType === 'expense' && (a.standardMapping === SM_EXP_DEPRECIATION || a.standardMapping === SM_EXP_AMORTISATION))
-  const engineDep = raw.map((m) => (m?.pl?.depreciation ?? 0) + (m?.pl?.amortisation ?? 0))
   const depFinal = depAcct.some((v) => v !== 0) ? depAcct : engineDep
   if (depFinal.some((v) => v !== 0)) rows.push({ id: 'exp-dep', name: '(f) Depreciation & Amortisation', type: 'account', values: depFinal, total: depFinal.reduce((s, v) => s + v, 0), indent: 1 })
 
@@ -131,28 +142,24 @@ function buildPLRows(
   )
   if (otherExpTotals.some((v) => v !== 0)) rows.push({ id: 'exp-other', name: '(g) Other Expenses', type: 'account', values: otherExpTotals, total: otherExpTotals.reduce((s, v) => s + v, 0), indent: 1 })
 
-  const totalExpenses = cogsTotals.map((v, i) => v + empTotals[i] + finTotals[i] + depFinal[i] + otherExpTotals[i])
-  rows.push({ id: 'total-expenses', name: 'V. Total Expenses', type: 'subtotal', values: totalExpenses, total: totalExpenses.reduce((s, v) => s + v, 0) })
+  // V. Total Expenses — from engine (includes hire salary, loan interest, asset depreciation)
+  rows.push({ id: 'total-expenses', name: 'V. Total Expenses', type: 'subtotal', values: engineTotalExp, total: engineTotalExp.reduce((s, v) => s + v, 0) })
 
-  // VI. Profit Before Exceptional Items & Tax
-  const pbe = totalRevenue.map((v, i) => v - totalExpenses[i])
+  // VI. Profit Before Exceptional Items & Tax — from engine
+  const exceptTotals = sumAccounts((a) => a.accountType === 'expense' && a.standardMapping === SM_EXP_EXCEPTIONAL)
+  const pbe = engineTotalRev.map((v, i) => v - engineTotalExp[i])
   rows.push({ id: 'profit-before-exceptional', name: 'VI. Profit Before Exceptional Items & Tax', type: 'total', values: pbe, total: pbe.reduce((s, v) => s + v, 0) })
 
-  // VII. Exceptional Items
-  const exceptTotals = sumAccounts((a) => a.accountType === 'expense' && a.standardMapping === SM_EXP_EXCEPTIONAL)
   if (exceptTotals.some((v) => v !== 0)) rows.push({ id: 'exceptional', name: 'VII. Exceptional Items', type: 'account', values: exceptTotals, total: exceptTotals.reduce((s, v) => s + v, 0), indent: 0 })
 
-  // VIII. Profit Before Tax
-  const pbt = pbe.map((v, i) => v - exceptTotals[i])
-  rows.push({ id: 'profit-before-tax', name: 'VIII. Profit Before Tax', type: 'total', values: pbt, total: pbt.reduce((s, v) => s + v, 0) })
+  // VIII. Profit Before Tax — from engine
+  rows.push({ id: 'profit-before-tax', name: 'VIII. Profit Before Tax', type: 'total', values: enginePBT, total: enginePBT.reduce((s, v) => s + v, 0) })
 
   // IX. Tax Expense
-  const taxExp = raw.map((m) => m?.pl?.taxExpense ?? 0)
-  if (taxExp.some((v) => v !== 0)) rows.push({ id: 'tax-expense', name: 'IX. Tax Expense', type: 'account', values: taxExp, total: taxExp.reduce((s, v) => s + v, 0), indent: 1 })
+  if (engineTaxExp.some((v) => v !== 0)) rows.push({ id: 'tax-expense', name: 'IX. Tax Expense', type: 'account', values: engineTaxExp, total: engineTaxExp.reduce((s, v) => s + v, 0), indent: 1 })
 
-  // X. Profit After Tax
-  const pat = pbt.map((v, i) => v - taxExp[i])
-  rows.push({ id: 'profit-after-tax', name: 'X. Profit After Tax (PAT)', type: 'total', values: pat, total: pat.reduce((s, v) => s + v, 0) })
+  // X. Profit After Tax — from engine
+  rows.push({ id: 'profit-after-tax', name: 'X. Profit After Tax (PAT)', type: 'total', values: enginePAT, total: enginePAT.reduce((s, v) => s + v, 0) })
 
   return rows
 }
