@@ -21,7 +21,7 @@ import type { ParsedSheet } from './excel-parser'
 
 interface TallyLedger {
   name: string
-  closingBalance: number // in paise
+  closingBalance: number // in paise — SIGNED: positive = Dr (asset/expense), negative = Cr (liability/income)
   period: string         // YYYY-MM-01
 }
 
@@ -29,15 +29,35 @@ interface TallyLedger {
 
 /**
  * Parse Tally balance strings like "1234.56 Dr" or "9876.00 Cr"
- * Returns paise as integer. We return the absolute value — COA mapper handles signs.
+ *
+ * IMPORTANT: We preserve the Dr/Cr sign here.
+ * In Tally's double-entry system:
+ *   - Dr (Debit)  = positive → Assets, Expenses (normal debit balance)
+ *   - Cr (Credit) = negative → Liabilities, Income, Equity (normal credit balance)
+ *
+ * A bank account showing "Cr" balance is an OVERDRAFT (liability).
+ * Stripping the sign and returning Math.abs() would treat an overdraft as a
+ * positive cash balance, corrupting cash runway metrics.
+ *
+ * The downstream COA mapper (account-classifier) is responsible for applying
+ * the correct sign convention per account type when building the trial balance.
  */
 function parseTallyBalance(raw: string): number {
   const str = raw.trim()
   if (!str || str === '0') return 0
+
+  // Extract the Dr/Cr suffix before stripping it
+  const isCr = /\bCr\b/i.test(str)
+
   const cleaned = str.replace(/\s*(Dr|Cr)\s*$/i, '').replace(/,/g, '').trim()
   const value = parseFloat(cleaned)
   if (isNaN(value)) return 0
-  return Math.round(Math.abs(value) * 100)
+
+  const paise = Math.round(value * 100)
+
+  // Cr balance = negative (liability / income / overdraft)
+  // Dr balance = positive (asset / expense)
+  return isCr ? -paise : paise
 }
 
 /**
@@ -218,7 +238,9 @@ function buildSheetFromLedgers(ledgers: TallyLedger[]): ParsedSheet | null {
   ]
 
   // Data rows: [accountName, rupees1, rupees2, ...]
-  // Divide paise by 100 — structure-detector calls toPaise() which multiplies back
+  // Divide paise by 100 — structure-detector calls toPaise() which multiplies back.
+  // Values are SIGNED: positive = Dr balance, negative = Cr balance.
+  // The COA mapper downstream applies the correct sign per account type.
   const dataRows: unknown[][] = accountNames.map((name) => {
     const periodMap = dataMap.get(name)!
     return [

@@ -5,6 +5,21 @@ import type { ComplianceResult } from '@/lib/engine/compliance'
 import { todayISTString } from '@/lib/utils/ist'
 
 /**
+ * Format a Date as YYYY-MM-DD using IST, not UTC.
+ * `new Date().toISOString()` returns UTC — at 11:30 PM IST on the 20th,
+ * UTC is still the 20th, but at 12:01 AM IST on the 21st, UTC is 6:31 PM on the 20th.
+ * Using UTC for due date strings causes off-by-one errors on compliance deadlines.
+ */
+function toISTDateString(date: Date): string {
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+  const ist = new Date(date.getTime() + IST_OFFSET_MS)
+  const y = ist.getUTCFullYear()
+  const m = String(ist.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(ist.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/**
  * Auto-populate GST filings from compliance engine result
  */
 export async function populateGSTFilings(
@@ -39,10 +54,9 @@ export async function populateGSTFilings(
     gstr3bDueDate.setMonth(gstr3bDueDate.getMonth() + 1)
     gstr3bDueDate.setDate(20)
 
-    // Use IST today — Vercel runs UTC, India is UTC+5:30
     const todayStr = todayISTString()
     const getStatus = (dueDate: Date) => {
-      const dueDateStr = dueDate.toISOString().split('T')[0]
+      const dueDateStr = toISTDateString(dueDate)
       return dueDateStr < todayStr ? 'overdue' : 'pending'
     }
 
@@ -51,7 +65,7 @@ export async function populateGSTFilings(
       period,
       returnType: 'GSTR-1',
       status: getStatus(gstr1DueDate),
-      dueDate: gstr1DueDate.toISOString().split('T')[0],
+      dueDate: toISTDateString(gstr1DueDate),
       amountPaise: 0, // GSTR-1 is informational
     })
 
@@ -60,7 +74,7 @@ export async function populateGSTFilings(
       period,
       returnType: 'GSTR-3B',
       status: getStatus(gstr3bDueDate),
-      dueDate: gstr3bDueDate.toISOString().split('T')[0],
+      dueDate: toISTDateString(gstr3bDueDate),
       amountPaise: gstPayable,
     })
   })

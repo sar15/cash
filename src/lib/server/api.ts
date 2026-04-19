@@ -2,12 +2,16 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { type ZodType } from 'zod'
 
 export class RouteError extends Error {
+  readonly fieldErrors?: Record<string, string[]>
+
   constructor(
     readonly status: number,
-    message: string
+    message: string,
+    fieldErrors?: Record<string, string[]>
   ) {
     super(message)
     this.name = 'RouteError'
+    this.fieldErrors = fieldErrors
   }
 }
 
@@ -74,8 +78,14 @@ export async function parseJsonBody<T>(
   const parsed = schema.safeParse(body)
   if (!parsed.success) {
     const flattened = parsed.error.flatten()
-    const message = flattened.formErrors[0] ?? 'Validation failed.'
-    throw new RouteError(422, message)
+    // Return both a human-readable message AND structured field errors
+    // so the frontend can display inline validation errors per field.
+    const firstFormError = flattened.formErrors[0]
+    const firstFieldError = Object.entries(flattened.fieldErrors)
+      .map(([field, msgs]) => `${field}: ${(msgs as string[] | undefined)?.[0] ?? 'invalid'}`)
+      .at(0)
+    const message = firstFormError ?? firstFieldError ?? 'Validation failed.'
+    throw new RouteError(422, message, flattened.fieldErrors as Record<string, string[]>)
   }
 
   return parsed.data
@@ -96,7 +106,13 @@ export function getRequiredSearchParam(
 
 export function handleRouteError(label: string, error: unknown) {
   if (error instanceof RouteError) {
-    return NextResponse.json({ error: error.message }, { status: error.status })
+    const body: Record<string, unknown> = { error: error.message }
+    // Include structured field errors when present so the frontend
+    // can display inline validation messages per field.
+    if (error.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
+      body.fieldErrors = error.fieldErrors
+    }
+    return NextResponse.json(body, { status: error.status })
   }
 
   console.error(JSON.stringify({
