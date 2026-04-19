@@ -22,6 +22,7 @@ import { evaluateGrowth } from './value-rules/growth'
 import { evaluateRollingAvg } from './value-rules/rolling-avg'
 import { evaluateSameLastYear } from './value-rules/same-last-year'
 import type { AnyValueRuleConfig } from './value-rules/types'
+import { SM_EXP_EMPLOYEE_BENEFITS, SM_ASSET_CASH, SM_ASSET_BANK_OTHER } from '@/lib/standards/standard-mappings'
 
 // ============================================================
 // TYPES
@@ -32,6 +33,7 @@ export interface AccountInput {
   name: string
   category: 'Revenue' | 'COGS' | 'Operating Expenses' | 'Assets' | 'Liabilities' | 'Equity'
   historicalValues: number[] // in paise
+  standardMapping?: string | null // e.g. 'asset.cash', 'expense.employee_benefits'
 }
 
 export interface ForecastMicroForecastItem {
@@ -103,13 +105,17 @@ function deriveSalaryForecast(
   microForecastItems: ForecastMicroForecastItem[] | undefined,
   accounts?: AccountInput[]
 ): number[] {
-  // Find salary account by standardMapping tag first, then name heuristics.
-  // Never falls back to a hardcoded demo ID — returns zeros if no salary account found.
+  // PRIMARY: find by standardMapping = SM_EXP_EMPLOYEE_BENEFITS (set during import mapping)
+  // FALLBACK: name heuristics for legacy data where standardMapping wasn't set
   const salaryAccountId = accounts?.find(
+    (a) => a.standardMapping === SM_EXP_EMPLOYEE_BENEFITS
+  )?.id ?? accounts?.find(
     (a) => a.name.toLowerCase().includes('salary') ||
            a.name.toLowerCase().includes('salaries') ||
            a.name.toLowerCase().includes('payroll') ||
-           a.name.toLowerCase().includes('wages')
+           a.name.toLowerCase().includes('wages') ||
+           a.name.toLowerCase().includes('remuneration') ||
+           a.name.toLowerCase().includes('stipend')
   )?.id
 
   const salaryForecast = [...(accountForecasts[salaryAccountId ?? ''] ?? Array(forecastLength).fill(0))]
@@ -258,11 +264,19 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
   })
 
   // 5. THREE-WAY INTEGRATION
-  // Find cash/bank account dynamically by name — never rely on hardcoded IDs
+  // PRIMARY: find cash/bank account by standardMapping (set during import mapping)
+  // FALLBACK: name heuristics for legacy data — covers 'HDFC A/c 1234', 'Petty Cash Imprest', etc.
   const cashAccount = accounts.find((a) =>
     a.category === 'Assets' && (
+      a.standardMapping === SM_ASSET_CASH ||
+      a.standardMapping === SM_ASSET_BANK_OTHER
+    )
+  ) ?? accounts.find((a) =>
+    a.category === 'Assets' && (
       a.name.toLowerCase().includes('cash') ||
-      a.name.toLowerCase().includes('bank')
+      a.name.toLowerCase().includes('bank') ||
+      a.name.toLowerCase().includes('current account') ||
+      a.name.toLowerCase().includes('savings account')
     )
   )
   const openingCash = cashAccount?.historicalValues.at(-1) ?? 0

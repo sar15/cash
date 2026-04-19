@@ -8,6 +8,17 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
+import { createId } from '@paralleldrive/cuid2'
+
+/**
+ * ID generation strategy:
+ * - crypto.randomUUID() (UUIDv4) for low-write tables (companies, accounts, scenarios, etc.)
+ *   These are queried by compound indexes, not PK scans, so random PKs are fine.
+ * - createId() (cuid2) for HIGH-WRITE append-only tables (auditLog, communicationLogs,
+ *   notifications, monthlyActuals). cuid2 is time-sortable, so new rows always append
+ *   to the end of the B-Tree index — no page thrashing or index fragmentation.
+ */
+const cuid = () => createId()
 
 // ============================================================
 // COMPANIES (Clerk manages users — no users table needed)
@@ -192,7 +203,7 @@ export const accounts = sqliteTable(
 export const monthlyActuals = sqliteTable(
   'monthly_actuals',
   {
-    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    id: text('id').primaryKey().$defaultFn(() => cuid()),
     companyId: text('company_id')
       .notNull()
       .references(() => companies.id, { onDelete: 'cascade' }),
@@ -225,6 +236,9 @@ export const scenarios = sqliteTable(
     }),
     description: text('description'),
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
+    // Optimistic Concurrency Control: increment on every update.
+    // API rejects updates where client sends an outdated version → 409 Conflict.
+    version: integer('version').notNull().default(1),
     createdAt: text('created_at').default(sql`(datetime('now'))`),
   },
   (table) => [index('idx_scenarios_company').on(table.companyId)]
@@ -434,7 +448,7 @@ export const quickMetricsConfig = sqliteTable('quick_metrics_config', {
 export const auditLog = sqliteTable(
   'audit_log',
   {
-    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    id: text('id').primaryKey().$defaultFn(() => cuid()),
     companyId: text('company_id')
       .notNull()
       .references(() => companies.id, { onDelete: 'cascade' }),
@@ -458,7 +472,7 @@ export const auditLog = sqliteTable(
 export const notifications = sqliteTable(
   'notifications',
   {
-    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    id: text('id').primaryKey().$defaultFn(() => cuid()),
     companyId: text('company_id')
       .notNull()
       .references(() => companies.id, { onDelete: 'cascade' }),
@@ -878,7 +892,7 @@ export const complianceTasks = sqliteTable(
 export const communicationLogs = sqliteTable(
   'communication_logs',
   {
-    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    id: text('id').primaryKey().$defaultFn(() => cuid()),
     taskId: text('task_id').references(() => complianceTasks.id, { onDelete: 'set null' }),
     companyId: text('company_id')
       .notNull()

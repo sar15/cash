@@ -84,6 +84,12 @@ function parseTallyDate(raw: string): string | null {
 function parseTallyXmlSax(text: string): TallyLedger[] {
   const ledgers: TallyLedger[] = []
 
+  // Memory guard: cap total ledger entries to prevent OOM on Vercel serverless.
+  // A 50MB Tally file can have 100k+ entries. At ~200 bytes per entry in JS heap,
+  // 500k entries = ~100MB just for the array — well within the 1GB limit.
+  // We cap at 200k entries which covers ~16k accounts × 12 months.
+  const MAX_LEDGER_ENTRIES = 200_000
+
   // State machine
   let inLedger = false
   let inMonthlyEntry = false
@@ -159,6 +165,12 @@ function parseTallyXmlSax(text: string): TallyLedger[] {
       if (currentLedgerName && currentDate && currentBalance) {
         const period = parseTallyDate(currentDate)
         if (period) {
+          if (ledgers.length >= MAX_LEDGER_ENTRIES) {
+            throw new Error(
+              `Tally XML rejected: file contains more than ${MAX_LEDGER_ENTRIES.toLocaleString()} ledger entries. ` +
+              'Please split the export into smaller date ranges (e.g. one financial year at a time).'
+            )
+          }
           ledgers.push({
             name: currentLedgerName,
             closingBalance: parseTallyBalance(currentBalance),
@@ -214,6 +226,14 @@ function buildSheetFromLedgers(ledgers: TallyLedger[]): ParsedSheet | null {
   // Collect all unique periods, sorted
   const periods = [...new Set(ledgers.map((l) => l.period))].sort()
   if (periods.length === 0) return null
+
+  // Guard: reject unreasonably large period ranges (> 10 years = 120 months)
+  if (periods.length > 120) {
+    throw new Error(
+      `Tally XML contains data spanning ${periods.length} months. ` +
+      'Please export one financial year at a time to avoid memory issues.'
+    )
+  }
 
   // Collect all unique account names (preserve insertion order = Tally order)
   const accountNames = [...new Set(ledgers.map((l) => l.name))]

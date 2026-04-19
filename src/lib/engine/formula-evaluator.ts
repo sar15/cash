@@ -35,6 +35,11 @@ export interface FormulaToken {
   displayName?: string
 }
 
+export interface FormulaResult {
+  value: number        // 0 on div/0 or arithmetic error — never null, never NaN
+  warning?: string     // set when a div/0 or arithmetic issue occurred
+}
+
 // Built-in aggregate tokens
 const BUILTIN_TOKENS: Record<string, string> = {
   REVENUE:      'Total Revenue',
@@ -95,16 +100,18 @@ function accountIdToVar(id: string): string {
 }
 
 /**
- * Evaluate a formula for a single month's data
+ * Evaluate a formula for a single month's data.
+ * Returns a FormulaResult — value is always a finite number (0 on error).
+ * Never returns null/NaN/Infinity so downstream charts never get broken data points.
  */
 function evaluateForMonth(
   expression: string,
   monthIndex: number,
   engineResult: EngineResult,
   accountForecasts: Record<string, number[]>
-): number | null {
+): FormulaResult {
   const raw = engineResult.rawIntegrationResults[monthIndex]
-  if (!raw) return null
+  if (!raw) return { value: 0, warning: 'No data for this month' }
 
   // Build variable scope with built-in tokens
   const scope: Record<string, number> = {
@@ -141,27 +148,47 @@ function evaluateForMonth(
   try {
     const parsed = SAFE_PARSER.parse(expr)
     const result = parsed.evaluate(scope) as unknown
-    if (typeof result !== 'number' || !isFinite(result) || isNaN(result)) return null
+    if (typeof result !== 'number' || isNaN(result)) {
+      return { value: 0, warning: 'Formula returned a non-numeric result' }
+    }
+    if (!isFinite(result)) {
+      // Division by zero — return 0 with a warning instead of null/Infinity
+      return { value: 0, warning: 'Division by zero (Div/0)' }
+    }
     // Round to avoid IEEE 754 float drift accumulating across months
-    return Math.round(result * 1e6) / 1e6
+    return { value: Math.round(result * 1e6) / 1e6 }
   } catch {
-    return null
+    return { value: 0, warning: 'Formula evaluation error' }
   }
 }
 
 /**
- * Evaluate a formula across all forecast months
+ * Evaluate a formula across all forecast months.
+ * Returns FormulaResult[] — values are always finite numbers, never null/NaN.
+ * Check result.warning to surface Div/0 indicators in the UI.
  */
 export function evaluateFormula(
   formula: CustomFormula,
   engineResult: EngineResult
-): (number | null)[] {
+): FormulaResult[] {
   const months = engineResult.forecastMonths.length
   const accountForecasts = engineResult.accountForecasts
 
   return Array.from({ length: months }, (_, i) =>
     evaluateForMonth(formula.expression, i, engineResult, accountForecasts)
   )
+}
+
+/**
+ * Convenience helper: evaluate and return plain number[] for consumers
+ * that don't need the warning metadata (charts, grids, etc.).
+ * Returns 0 for any month with a div/0 or error.
+ */
+export function evaluateFormulaValues(
+  formula: CustomFormula,
+  engineResult: EngineResult
+): number[] {
+  return evaluateFormula(formula, engineResult).map(r => r.value)
 }
 
 /**

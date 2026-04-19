@@ -10,7 +10,7 @@ import type { AnyValueRuleConfig } from '@/lib/engine/value-rules/types'
 import type { AnyTimingProfileConfig } from '@/lib/engine/timing-profiles/types'
 import type { ViewType } from './ViewSwitcher'
 import { useFormulaStore } from '@/stores/formula-store'
-import { evaluateFormula } from '@/lib/engine/formula-evaluator'
+import { evaluateFormulaValues } from '@/lib/engine/formula-evaluator'
 import { formatAuto } from '@/lib/utils/indian-format'
 import { CustomFormulaBuilder } from './CustomFormulaBuilder'
 import { isCOGSAccount } from '@/lib/standards/account-classifier'
@@ -696,9 +696,8 @@ const DriversView = memo(function DriversView({
           )}
           {companyId && formulas.filter(f => f.companyId === companyId).map(formula => {
             if (!engineResult) return null
-            const values = evaluateFormula(formula, engineResult)
-            const nonNull = values.filter((v): v is number => v !== null)
-            const avg = nonNull.length > 0 ? nonNull.reduce((s, v) => s + v, 0) / nonNull.length : null
+            const values = evaluateFormulaValues(formula, engineResult)
+            const avg = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : null
 
             const fmtValue = (v: number | null) => {
               if (v === null) return '—'
@@ -742,7 +741,7 @@ const DriversView = memo(function DriversView({
                   </div>
                 </td>
                 {values.map((v, i) => (
-                  <td key={i} className={cn('px-2 py-1.5 tabular-nums', v !== null ? 'text-[#0F172A]' : 'text-[#CBD5E1]')}>
+                  <td key={i} className="px-2 py-1.5 tabular-nums text-[#0F172A]">
                     {fmtValue(v)}
                   </td>
                 ))}

@@ -30,10 +30,17 @@ export async function getAccountTree(companyId: string) {
     }
   })
 
-  return roots.map((root) => ({
-    ...root,
-    children: childMap.get(root.id) ?? [],
-  }))
+  // Build tree with cycle protection — max depth of 20 prevents infinite recursion
+  // if a circular reference somehow exists in the DB despite the write-time guard.
+  const buildNode = (account: (typeof accounts)[0], depth = 0): object => {
+    if (depth > 20) return { ...account, children: [] }
+    return {
+      ...account,
+      children: (childMap.get(account.id) ?? []).map(child => buildNode(child, depth + 1)),
+    }
+  }
+
+  return roots.map(root => buildNode(root))
 }
 
 export async function upsertAccount(
@@ -52,6 +59,30 @@ export async function updateAccount(
   companyId: string,
   data: Partial<typeof schema.accounts.$inferInsert>
 ) {
+  // Guard against circular parent references before writing to DB.
+  // If parentId is being changed, walk up the ancestor chain to ensure
+  // the new parent is not already a descendant of this account.
+  if (data.parentId && data.parentId !== accountId) {
+    const allAccounts = await getAccountsForCompany(companyId)
+    const accountMap = new Map(allAccounts.map(a => [a.id, a]))
+
+    // Walk up from the proposed new parent — if we ever reach accountId, it's a cycle
+    let cursor: string | null = data.parentId
+    const visited = new Set<string>()
+    while (cursor) {
+      if (cursor === accountId) {
+        throw new RouteError(
+          409,
+          'Circular reference detected: the selected parent account is a descendant of this account. ' +
+          'Choose a different parent to avoid an infinite loop in the account tree.'
+        )
+      }
+      if (visited.has(cursor)) break // existing cycle in DB — stop traversal
+      visited.add(cursor)
+      cursor = accountMap.get(cursor)?.parentId ?? null
+    }
+  }
+
   const [updated] = await db
     .update(schema.accounts)
     .set(data)

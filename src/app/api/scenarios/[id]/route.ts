@@ -27,7 +27,7 @@ export async function GET(
 // PATCH /api/scenarios/[id] — Update scenario metadata
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<any> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const ctx = await resolveAuthedCompany(request)
@@ -38,10 +38,20 @@ export async function PATCH(
     const parsed = updateScenarioSchema.safeParse(body)
     if (!parsed.success) return jsonValidationError(parsed.error.issues)
 
-    const updated = await scenarioQueries.updateScenario(id, ctx.companyId, parsed.data)
-    if (!updated) return jsonError('Scenario not found', 404)
+    // Support OCC: client may send `version` to prevent concurrent overwrites
+    const expectedVersion = typeof body.version === 'number' ? body.version : undefined
 
-    return jsonOk({ scenario: updated })
+    const result = await scenarioQueries.updateScenario(id, ctx.companyId, parsed.data, expectedVersion)
+
+    if (!result) return jsonError('Scenario not found', 404)
+    if ('conflict' in result) {
+      return jsonError(
+        'This scenario was modified by another user. Please refresh and try again.',
+        409
+      )
+    }
+
+    return jsonOk({ scenario: result.scenario })
   } catch {
     return jsonError('Failed to update scenario', 500)
   }

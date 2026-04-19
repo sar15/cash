@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
 
 export async function getScenarios(companyId: string) {
@@ -27,17 +27,57 @@ export async function createScenario(
   return scenario
 }
 
+/**
+ * Update a scenario with Optimistic Concurrency Control (OCC).
+ *
+ * Pass `expectedVersion` (the version the client last read) to prevent
+ * two collaborators from silently overwriting each other's changes.
+ *
+ * Returns:
+ *   - { scenario } on success
+ *   - { conflict: true } when the version has changed since the client last read
+ *   - null when the scenario doesn't exist or doesn't belong to this company
+ */
 export async function updateScenario(
   scenarioId: string,
   companyId: string,
-  data: Partial<typeof schema.scenarios.$inferInsert>
-) {
+  data: Partial<typeof schema.scenarios.$inferInsert>,
+  expectedVersion?: number
+): Promise<{ scenario: typeof schema.scenarios.$inferSelect } | { conflict: true } | null> {
+  // Build the WHERE clause — include version check only when caller provides it
+  const whereClause = expectedVersion !== undefined
+    ? and(
+        eq(schema.scenarios.id, scenarioId),
+        eq(schema.scenarios.companyId, companyId),
+        eq(schema.scenarios.version, expectedVersion)
+      )
+    : and(
+        eq(schema.scenarios.id, scenarioId),
+        eq(schema.scenarios.companyId, companyId)
+      )
+
   const [updated] = await db
     .update(schema.scenarios)
-    .set(data)
-    .where(and(eq(schema.scenarios.id, scenarioId), eq(schema.scenarios.companyId, companyId)))
+    .set({
+      ...data,
+      // Always increment version on every write
+      version: sql`${schema.scenarios.version} + 1`,
+    })
+    .where(whereClause)
     .returning()
-  return updated
+
+  if (!updated) {
+    // Distinguish "not found" from "version conflict"
+    if (expectedVersion !== undefined) {
+      const exists = await db.query.scenarios.findFirst({
+        where: and(eq(schema.scenarios.id, scenarioId), eq(schema.scenarios.companyId, companyId)),
+      })
+      if (exists) return { conflict: true }
+    }
+    return null
+  }
+
+  return { scenario: updated }
 }
 
 export async function deleteScenario(scenarioId: string, companyId: string) {

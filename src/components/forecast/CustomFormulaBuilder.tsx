@@ -19,7 +19,7 @@ import type { Account } from '@/stores/accounts-store'
 import type { EngineResult } from '@/lib/engine'
 import type { CustomFormula } from '@/lib/engine/formula-evaluator'
 import {
-  evaluateFormula,
+  evaluateFormulaValues,
   validateFormula,
   BUILTIN_TOKENS,
 } from '@/lib/engine/formula-evaluator'
@@ -90,13 +90,14 @@ export function CustomFormulaBuilder({ companyId, accounts, engineResult, onClos
   const previewValues = useMemo(() => {
     if (!engineResult || !expression.trim() || validationError) return null
     const formula: CustomFormula = { id: 'preview', name, expression, format, companyId }
-    return evaluateFormula(formula, engineResult)
+    return evaluateFormulaValues(formula, engineResult)
   }, [engineResult, expression, validationError, name, format, companyId])
 
   const previewAvg = useMemo(() => {
-    if (!previewValues) return null
-    const nonNull = previewValues.filter((v): v is number => v !== null)
-    return nonNull.length > 0 ? nonNull.reduce((s, v) => s + v, 0) / nonNull.length : null
+    if (!previewValues || previewValues.length === 0) return null
+    // evaluateFormulaValues always returns numbers (0 on error), so no null filtering needed
+    const avg = previewValues.reduce((s, v) => s + v, 0) / previewValues.length
+    return avg
   }, [previewValues])
 
   const insertToken = useCallback((token: string) => {
