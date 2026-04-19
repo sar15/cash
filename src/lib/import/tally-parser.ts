@@ -76,8 +76,22 @@ function parseTallyXmlSax(text: string): TallyLedger[] {
 
   const parser = new SaxesParser({ xmlns: false })
 
+  // Security: hard cap on nesting depth to prevent stack overflow from deeply nested XML
+  const MAX_DEPTH = 50
+  let entityExpansionCount = 0
+  const MAX_ENTITIES = 1000
+
   parser.on('opentag', (node) => {
     depth++
+
+    // Security: reject suspiciously deep nesting (Billion Laughs / recursive expansion)
+    if (depth > MAX_DEPTH) {
+      throw new Error(
+        `Tally XML rejected: nesting depth exceeds ${MAX_DEPTH}. ` +
+        'This may indicate a malformed or malicious file.'
+      )
+    }
+
     currentTag = node.name.toUpperCase()
 
     if (currentTag === 'LEDGER') {
@@ -100,6 +114,12 @@ function parseTallyXmlSax(text: string): TallyLedger[] {
   parser.on('text', (text) => {
     const t = text.trim()
     if (!t) return
+
+    // Security: track total text nodes processed to detect entity expansion attacks
+    entityExpansionCount++
+    if (entityExpansionCount > MAX_ENTITIES * 1000) {
+      throw new Error('Tally XML rejected: excessive text nodes detected (possible entity expansion attack).')
+    }
 
     if (inLedger && !inMonthlyEntry && currentTag === 'NAME' && !currentLedgerName) {
       currentLedgerName = t
@@ -244,6 +264,15 @@ export async function parseTallyXml(buffer: ArrayBuffer): Promise<ParsedSheet[]>
   }
 
   const text = new TextDecoder().decode(buffer)
+
+  // Security: Reject DOCTYPE declarations entirely to prevent XXE and Billion Laughs attacks.
+  // Tally exports never require DOCTYPE — any file containing one is either malformed or malicious.
+  if (/<!DOCTYPE/i.test(text)) {
+    throw new Error(
+      'Invalid Tally XML: DOCTYPE declarations are not allowed for security reasons. ' +
+      'Please re-export directly from Tally without modifications.'
+    )
+  }
 
   if (!text.includes('<LEDGER') && !text.includes('<TALLYMESSAGE') && !text.includes('<ENVELOPE')) {
     throw new Error(

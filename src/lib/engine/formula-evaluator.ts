@@ -11,8 +11,12 @@
  *
  * Built-in tokens:
  *   REVENUE, COGS, GROSS_PROFIT, OPEX, NET_INCOME, OCF, FCF, CASH
+ *
+ * Security: Uses expr-eval (AST-based parser) — NO eval() or new Function().
+ * expr-eval parses expressions into an AST and walks it safely.
  */
 
+import { Parser } from 'expr-eval'
 import type { EngineResult } from './index'
 
 export interface CustomFormula {
@@ -43,6 +47,53 @@ const BUILTIN_TOKENS: Record<string, string> = {
   CASH:         'Cash Balance',
 }
 
+// Safe expr-eval parser — only arithmetic + a small set of math functions
+// No access to JS globals, prototype chain, or any side-effecting operations
+const SAFE_PARSER = new Parser({
+  operators: {
+    add: true,
+    concatenate: false,
+    conditional: true,   // ternary: a ? b : c
+    divide: true,
+    factorial: false,
+    multiply: true,
+    power: true,
+    remainder: true,
+    subtract: true,
+    logical: false,      // no && || to prevent short-circuit tricks
+    comparison: true,    // allow > < >= <= == for IF-like conditions
+    'in': false,
+    assignment: false,   // CRITICAL: no variable assignment
+  },
+})
+
+// Whitelist only safe math functions — no access to anything else
+SAFE_PARSER.functions = {
+  abs:   Math.abs,
+  ceil:  Math.ceil,
+  floor: Math.floor,
+  round: Math.round,
+  max:   Math.max,
+  min:   Math.min,
+  sqrt:  Math.sqrt,
+  pow:   Math.pow,
+  log:   Math.log,
+  log2:  Math.log2,
+  log10: Math.log10,
+}
+
+// No constants beyond what we explicitly provide
+SAFE_PARSER.consts = {}
+
+/**
+ * Sanitize an account ID so it can be used as a variable name in expr-eval.
+ * Account IDs may contain hyphens (e.g. "rev-001") which are not valid identifiers.
+ * We replace them with underscores and prefix with "acc_".
+ */
+function accountIdToVar(id: string): string {
+  return 'acc_' + id.replace(/[^a-zA-Z0-9_]/g, '_')
+}
+
 /**
  * Evaluate a formula for a single month's data
  */
@@ -55,46 +106,41 @@ function evaluateForMonth(
   const raw = engineResult.rawIntegrationResults[monthIndex]
   if (!raw) return null
 
-  // Replace built-in tokens
-  let expr = expression
-    .replace(/\bREVENUE\b/g, String(raw.pl.revenue))
-    .replace(/\bCOGS\b/g, String(raw.pl.cogs))
-    .replace(/\bGROSS_PROFIT\b/g, String(raw.pl.grossProfit))
-    .replace(/\bOPEX\b/g, String(raw.pl.expense))
-    .replace(/\bNET_INCOME\b/g, String(raw.pl.netIncome))
-    .replace(/\bOCF\b/g, String(raw.cf.operatingCashFlow))
-    .replace(/\bFCF\b/g, String(raw.cf.operatingCashFlow + raw.cf.investingCashFlow))
-    .replace(/\bCASH\b/g, String(raw.bs.cash))
+  // Build variable scope with built-in tokens
+  const scope: Record<string, number> = {
+    REVENUE:      raw.pl.revenue,
+    COGS:         raw.pl.cogs,
+    GROSS_PROFIT: raw.pl.grossProfit,
+    OPEX:         raw.pl.expense,
+    NET_INCOME:   raw.pl.netIncome,
+    OCF:          raw.cf.operatingCashFlow,
+    FCF:          raw.cf.operatingCashFlow + raw.cf.investingCashFlow,
+    CASH:         raw.bs.cash,
+  }
 
-  // Replace [account_id] tokens
-  expr = expr.replace(/\[([^\]]+)\]/g, (_, accountId: string) => {
+  // Replace [account_id] references with sanitized variable names
+  // and populate scope with their values
+  let expr = expression.replace(/\[([^\]]+)\]/g, (_, accountId: string) => {
+    const varName = accountIdToVar(accountId)
     const values = accountForecasts[accountId]
-    if (!values) return '0'
-    return String(values[monthIndex] ?? 0)
+    scope[varName] = values ? (values[monthIndex] ?? 0) : 0
+    return varName
   })
 
-  // Safe eval — allow numbers, math operators, and safe math functions
-  // Replace MAX/MIN/ABS/IF with safe JS equivalents before evaluating
-  const safeExpr = expr
-    .replace(/\bMAX\s*\(/gi, 'Math.max(')
-    .replace(/\bMIN\s*\(/gi, 'Math.min(')
-    .replace(/\bABS\s*\(/gi, 'Math.abs(')
-    .replace(/\bROUND\s*\(/gi, 'Math.round(')
-    .replace(/\bFLOOR\s*\(/gi, 'Math.floor(')
-    .replace(/\bCEIL\s*\(/gi, 'Math.ceil(')
+  // Replace MAX/MIN/ABS/IF with expr-eval equivalents (lowercase)
+  expr = expr
+    .replace(/\bMAX\s*\(/gi, 'max(')
+    .replace(/\bMIN\s*\(/gi, 'min(')
+    .replace(/\bABS\s*\(/gi, 'abs(')
+    .replace(/\bROUND\s*\(/gi, 'round(')
+    .replace(/\bFLOOR\s*\(/gi, 'floor(')
+    .replace(/\bCEIL\s*\(/gi, 'ceil(')
+    // IF(cond, then, else) → (cond ? then : else)
     .replace(/\bIF\s*\(([^,]+),([^,]+),([^)]+)\)/gi, '(($1) ? ($2) : ($3))')
 
-  const stripped = safeExpr.replace(/\s/g, '')
-  // Strict allowlist: only digits, arithmetic operators, Math.* calls, parentheses, commas, dots, e (scientific notation)
-  // Explicitly blocks: while, for, function, =>, import, require, process, window, document
-  if (!/^[0-9+\-*/().eMath,_a-z]+$/i.test(stripped)) return null
-  if (stripped.length === 0 || stripped === '()') return null
-  // Secondary check: block any remaining dangerous keywords after Math.* substitution
-  if (/\b(while|for|do|function|return|import|require|process|window|document|global|eval|fetch|XMLHttp)\b/i.test(safeExpr)) return null
-
   try {
-    const fn = new Function('Math', `"use strict"; return (${safeExpr})`)
-    const result = fn(Math) as unknown
+    const parsed = SAFE_PARSER.parse(expr)
+    const result = parsed.evaluate(scope) as unknown
     if (typeof result !== 'number' || !isFinite(result) || isNaN(result)) return null
     // Round to avoid IEEE 754 float drift accumulating across months
     return Math.round(result * 1e6) / 1e6
@@ -135,22 +181,27 @@ export function validateFormula(
     }
   }
 
-  // Check for unknown tokens (after replacing known ones)
+  // Build a test expression with dummy values to validate syntax
   let testExpr = expression
   for (const token of Object.keys(BUILTIN_TOKENS)) {
     testExpr = testExpr.replace(new RegExp(`\\b${token}\\b`, 'g'), '1')
   }
   testExpr = testExpr.replace(/\[[^\]]+\]/g, '1')
-
-  if (!/^[\d\s+\-*/().eMath,_a-zA-Z]+$/.test(testExpr.replace(/\s/g, ''))) {
-    return 'Formula contains invalid characters. Use numbers, +, -, *, /, (, ), MAX(), MIN(), ABS(), IF(), and account references like [account_id]'
-  }
+  testExpr = testExpr
+    .replace(/\bMAX\s*\(/gi, 'max(')
+    .replace(/\bMIN\s*\(/gi, 'min(')
+    .replace(/\bABS\s*\(/gi, 'abs(')
+    .replace(/\bROUND\s*\(/gi, 'round(')
+    .replace(/\bFLOOR\s*\(/gi, 'floor(')
+    .replace(/\bCEIL\s*\(/gi, 'ceil(')
+    .replace(/\bIF\s*\(([^,]+),([^,]+),([^)]+)\)/gi, '(($1) ? ($2) : ($3))')
 
   try {
-    new Function(`return (${testExpr})`)()
+    SAFE_PARSER.parse(testExpr).evaluate({})
     return null
-  } catch {
-    return 'Formula has a syntax error'
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return `Formula has a syntax error: ${msg}`
   }
 }
 
