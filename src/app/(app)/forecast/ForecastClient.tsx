@@ -12,6 +12,7 @@ import { useAccountsStore } from '@/stores/accounts-store'
 import { useCompanyStore } from '@/stores/company-store'
 import { ViewSwitcher, type ViewType } from '@/components/forecast/ViewSwitcher'
 import { ForecastGrid } from '@/components/forecast/ForecastGrid'
+import { AnnualView } from '@/components/forecast/AnnualView'
 import { MicroForecastWizard } from '@/components/forecast/MicroForecastWizard'
 import { BusinessEventsList } from '@/components/forecast/BusinessEventsList'
 import { AccountRuleEditor } from '@/components/forecast/AccountRuleEditor'
@@ -88,7 +89,7 @@ export default function ForecastClient() {
     }
   }, [companyId, company, reloadCompany])
 
-  // Keyboard shortcuts: P = P&L, B = Balance Sheet, C = Cash Flow, D = Drivers
+  // Keyboard shortcuts: P = P&L, B = Balance Sheet, C = Cash Flow, D = Drivers, A = Annual
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
@@ -98,6 +99,7 @@ export default function ForecastClient() {
       if (e.key === 'c' || e.key === 'C') setActiveView('cf')
       if (e.key === 'd' || e.key === 'D') setActiveView('drivers')
       if (e.key === 'v' || e.key === 'V') setActiveView('variance')
+      if (e.key === 'a' || e.key === 'A') setActiveView('annual')
       if (e.key === 'n' || e.key === 'N') setShowWizard(true)
       if (e.key === 's' || e.key === 'S') setShowSensitivity(v => !v)
     }
@@ -386,9 +388,9 @@ export default function ForecastClient() {
           {/* Keyboard shortcuts hint */}
           <div
             className="hidden items-center gap-1 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1.5 lg:flex"
-            title="P=P&L · B=Balance Sheet · C=Cash Flow · D=Drivers · V=Variance · N=New Event · S=What-If"
+            title="P=P&L · B=Balance Sheet · C=Cash Flow · D=Drivers · V=Variance · A=Annual · N=New Event · S=What-If"
           >
-            <span className="text-[10px] font-medium text-[#94A3B8]">P · B · C · D · V</span>
+            <span className="text-[10px] font-medium text-[#94A3B8]">P · B · C · D · V · A</span>
           </div>
 
           {/* Add Event — primary CTA */}
@@ -404,26 +406,36 @@ export default function ForecastClient() {
 
       {/* ── Main content ── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Grid */}
+        {/* Grid or Annual View */}
         <div className={cn('flex-1 overflow-auto', (editingAccount || showSensitivity) ? 'border-r border-[#E2E8F0]' : '')}>
-          <ForecastGrid
-            view={activeView}
-            accounts={accounts}
-            forecastMonths={forecastMonths}
-            engineResult={engineResult}
-            actuals={actualsMap}
-            valueRules={valueRules}
-            timingProfiles={timingProfiles}
-            onCellEdit={handleCellEdit}
-            onAccountClick={activeView === 'pl' ? (id) => setEditingAccountId(id) : undefined}
-            fullHeight
-            compareMode={compareMode}
-            scenarioResults={scenarioResults}
-            lockedPeriods={company?.lockedPeriods ? JSON.parse(company.lockedPeriods) : []}
-            onToggleLock={handleToggleLock}
-            companyId={companyId ?? undefined}
-            onCreateFormula={activeView === 'drivers' ? () => setShowFormulaBuilder(true) : undefined}
-          />
+          {activeView === 'annual' ? (
+            <AnnualView
+              engineResult={engineResult}
+              forecastMonths={forecastMonths}
+              companyId={companyId ?? ''}
+              scenarioId={selectedScenarioId}
+              company={company}
+            />
+          ) : (
+            <ForecastGrid
+              view={activeView}
+              accounts={accounts}
+              forecastMonths={forecastMonths}
+              engineResult={engineResult}
+              actuals={actualsMap}
+              valueRules={valueRules}
+              timingProfiles={timingProfiles}
+              onCellEdit={handleCellEdit}
+              onAccountClick={activeView === 'pl' ? (id) => setEditingAccountId(id) : undefined}
+              fullHeight
+              compareMode={compareMode}
+              scenarioResults={scenarioResults}
+              lockedPeriods={company?.lockedPeriods ? JSON.parse(company.lockedPeriods) : []}
+              onToggleLock={handleToggleLock}
+              companyId={companyId ?? undefined}
+              onCreateFormula={activeView === 'drivers' ? () => setShowFormulaBuilder(true) : undefined}
+            />
+          )}
         </div>
 
         {/* Right panel: What-If or Account Rule Editor */}

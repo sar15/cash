@@ -14,12 +14,14 @@ export interface Company {
   name: string
   pan?: string | null
   gstin?: string | null
+  cin?: string | null
+  registeredAddress?: string | null
   industry: string
   fyStartMonth: number
   currency: string
   numberFormat: string
   logoUrl?: string | null
-  lockedPeriods?: string | null // JSON array of YYYY-MM-01 strings
+  lockedPeriods?: string | null
   createdAt?: string
   updatedAt?: string
 }

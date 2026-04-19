@@ -23,6 +23,8 @@ export const createCompanySchema = z.object({
   name: z.string().min(1, 'Company name is required').max(200),
   pan: z.string().max(10).optional(),
   gstin: z.string().max(15).optional(),
+  cin: z.string().max(21).optional(),
+  registeredAddress: z.string().max(500).optional(),
   industry: z.string().default('general'),
   fyStartMonth: z.number().int().min(1).max(12).default(4),
   currency: z.string().default('INR'),

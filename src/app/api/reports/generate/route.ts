@@ -31,6 +31,11 @@ const reportRequestSchema = z.object({
   scenarioId: z.string().nullable().optional(),
   includeWaterfall: z.boolean().optional(),
   includeScenarios: z.boolean().optional(),
+  notes: z.object({
+    pl: z.string().optional(),
+    bs: z.string().optional(),
+    cf: z.string().optional(),
+  }).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -41,7 +46,7 @@ export async function POST(request: NextRequest) {
     if (capabilityError) return capabilityError
 
     const body = await parseJsonBody(request, reportRequestSchema)
-    const { periodStart, periodEnd, scenarioId, includeWaterfall, includeScenarios } = body
+    const { periodStart, periodEnd, scenarioId, includeWaterfall, includeScenarios, notes } = body
 
     const idempotencyKey = getIdempotencyKey(request)
     if (idempotencyKey) {
@@ -209,6 +214,7 @@ export async function POST(request: NextRequest) {
       accounts: accounts as unknown as Account[],
       includeWaterfall,
       includeScenarios,
+      notes,
     })
 
     // Upload to storage if configured (Uploadthing), otherwise return PDF directly

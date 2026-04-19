@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils'
 
-export type ViewType = 'pl' | 'bs' | 'cf' | 'drivers' | 'variance'
+export type ViewType = 'pl' | 'bs' | 'cf' | 'drivers' | 'variance' | 'annual'
 
 interface ViewSwitcherProps {
   activeView: ViewType
@@ -15,6 +15,7 @@ const views: { id: ViewType; label: string; description: string }[] = [
   { id: 'cf',       label: 'Cash Flow',      description: 'Cash Flow Statement (Indirect)' },
   { id: 'drivers',  label: 'KPI Drivers',    description: 'Margins, ratios & efficiency metrics' },
   { id: 'variance', label: 'Variance',       description: 'Actuals vs Forecast' },
+  { id: 'annual',   label: 'Annual',         description: 'Full-year Schedule III statements' },
 ]
 
 export function ViewSwitcher({ activeView, onViewChange }: ViewSwitcherProps) {

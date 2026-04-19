@@ -182,10 +182,11 @@ export default function DashboardPage() {
     const effectiveBurn = avgMonthlyBurn > 0 ? avgMonthlyBurn : avgExpenseBurn
     const runway = effectiveBurn > 0 ? Math.min(cashPosition / effectiveBurn, 36) : 36
 
-    const netIncome = baselineMonths.reduce((sum, m) => sum + (m?.pl?.netIncome ?? 0), 0)
+    // Use Schedule III profitAfterTax (PAT) with fallback to netIncome
+    const netIncome = baselineMonths.reduce((sum, m) => sum + (m?.pl?.profitAfterTax ?? m?.pl?.netIncome ?? 0), 0)
 
-    // Gross Margin %
-    const totalRevenue = baselineMonths.reduce((sum, m) => sum + (m?.pl?.revenue ?? 0), 0)
+    // Gross Margin % - use Schedule III revenueFromOps with fallback to revenue
+    const totalRevenue = baselineMonths.reduce((sum, m) => sum + (m?.pl?.revenueFromOps ?? m?.pl?.revenue ?? 0), 0)
     const totalCogs = baselineMonths.reduce((sum, m) => sum + (m?.pl?.cogs ?? 0), 0)
     const grossMarginPct = totalRevenue > 0 ? ((totalRevenue - totalCogs) / totalRevenue) * 100 : 0
 
@@ -198,7 +199,7 @@ export default function DashboardPage() {
 
     const ar = lastMonth?.bs?.ar ?? 0
     const ap = lastMonth?.bs?.ap ?? 0
-    const monthlyRev = baselineMonths[baselineMonths.length - 1]?.pl?.revenue ?? 1
+    const monthlyRev = baselineMonths[baselineMonths.length - 1]?.pl?.revenueFromOps ?? baselineMonths[baselineMonths.length - 1]?.pl?.revenue ?? 1
     const wcDays = Math.round(((ar - ap) / (Math.abs(monthlyRev) || 1)) * 30)
 
     // Projected negative cash — check next 3 months
@@ -363,7 +364,7 @@ export default function DashboardPage() {
         operatingCashFlow={dashboardData.operatingCashFlow}
         freeCashFlow={dashboardData.freeCashFlow}
         monthlyCash={(engineResult?.rawIntegrationResults ?? []).map(m => m?.bs?.cash ?? 0)}
-        monthlyNetIncome={(engineResult?.rawIntegrationResults ?? []).map(m => m?.pl?.netIncome ?? 0)}
+        monthlyNetIncome={(engineResult?.rawIntegrationResults ?? []).map(m => m?.pl?.profitAfterTax ?? m?.pl?.netIncome ?? 0)}
       />
 
       {/* Cash runway chart */}
@@ -404,15 +405,15 @@ export default function DashboardPage() {
                   <th className="text-left">Month</th>
                   <th title="Total income from sales and services">Revenue</th>
                   <th title="COGS + Operating expenses">Total Costs</th>
-                  <th title="Revenue minus all costs">Net Income</th>
+                  <th title="Profit After Tax (Schedule III Line X)">PAT</th>
                   <th title="Projected cash in bank">Cash Balance</th>
                 </tr>
               </thead>
               <tbody>
                 {(engineResult?.rawIntegrationResults ?? []).slice(0, 6).map((month, idx) => {
-                  const rev = month?.pl?.revenue ?? 0
+                  const rev = month?.pl?.revenueFromOps ?? month?.pl?.revenue ?? 0
                   const exp = (month?.pl?.cogs ?? 0) + (month?.pl?.expense ?? 0)
-                  const net = month?.pl?.netIncome ?? 0
+                  const net = month?.pl?.profitAfterTax ?? month?.pl?.netIncome ?? 0
                   const cash = month?.bs?.cash ?? 0
                   const margin = rev > 0 ? (net / rev) * 100 : 0
 
@@ -444,7 +445,7 @@ export default function DashboardPage() {
           </div>
           <div className="border-t border-[#F1F5F9] px-4 py-2">
             <p className="text-[10px] text-[#94A3B8]">
-              Net Income % = profit margin for that month · Cash Balance = projected bank balance
+              PAT % = profit margin for that month · Cash Balance = projected bank balance
             </p>
           </div>
         </SurfaceCard>

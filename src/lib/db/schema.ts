@@ -20,15 +20,15 @@ export const companies = sqliteTable(
     name: text('name').notNull(),
     pan: text('pan'),
     gstin: text('gstin'),
+    cin: text('cin'),                              // Corporate Identity Number (e.g. U72200MH2020PTC123456)
+    registeredAddress: text('registered_address'), // Full registered address for statutory documents
     industry: text('industry').default('general'),
     fyStartMonth: integer('fy_start_month').default(4),
     currency: text('currency').default('INR'),
     numberFormat: text('number_format').default('lakhs'),
     logoUrl: text('logo_url'),
     isPrimary: integer('is_primary', { mode: 'boolean' }).default(false),
-    // Single date boundary: everything on/before this date is locked actuals, everything after is forecast.
-    // Replaces the fragile lockedPeriods JSON array — simpler, corruption-proof.
-    booksClosedDate: text('books_closed_date'), // YYYY-MM-01 or null (nothing locked)
+    booksClosedDate: text('books_closed_date'),
     createdAt: text('created_at').default(sql`(datetime('now'))`),
     updatedAt: text('updated_at').default(sql`(datetime('now'))`),
   },
@@ -637,6 +637,7 @@ export const companiesRelations = relations(companies, ({ many, one }) => ({
   compliancePayments: many(compliancePayments),
   taxRateHistory: many(taxRateHistory),
   accountMappings: many(accountMappings),
+  scenarioNotes: many(scenarioNotes),
   complianceConfig: one(complianceConfig, {
     fields: [companies.id],
     references: [complianceConfig.companyId],
@@ -691,6 +692,7 @@ export const scenariosRelations = relations(scenarios, ({ many, one }) => ({
   overrides: many(scenarioOverrides),
   valueRules: many(valueRules),
   forecastResults: many(forecastResults),
+  scenarioNotes: many(scenarioNotes),
 }))
 
 export const scenarioOverridesRelations = relations(scenarioOverrides, ({ one }) => ({
@@ -897,6 +899,39 @@ export const communicationLogs = sqliteTable(
   ]
 )
 
+// ============================================================
+// SCENARIO NOTES — MD&A commentary for annual financial statements
+// Stores auto-generated summaries and user notes per statement, period, and scenario
+// ============================================================
+export const scenarioNotes = sqliteTable(
+  'scenario_notes',
+  {
+    id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    scenarioId: text('scenario_id').references(() => scenarios.id, {
+      onDelete: 'set null',
+    }), // null = base case
+    statementType: text('statement_type').notNull(), // 'PL' | 'BS' | 'CF'
+    periodKey: text('period_key').notNull(), // e.g. "FY25-26" — soft reference, no FK
+    autoSummary: text('auto_summary').notNull().default('[]'), // JSON array of strings
+    autoSummaryGeneratedAt: text('auto_summary_generated_at'), // ISO timestamp
+    userNotes: text('user_notes').notNull().default(''), // plain text (no Markdown in v1)
+    updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+    updatedBy: text('updated_by').notNull(), // Clerk user ID
+  },
+  (table) => [
+    uniqueIndex('idx_scenario_notes_unique').on(
+      table.companyId,
+      table.scenarioId,
+      table.statementType,
+      table.periodKey
+    ),
+    index('idx_scenario_notes_company_period').on(table.companyId, table.periodKey),
+  ]
+)
+
 export const complianceTasksRelations = relations(complianceTasks, ({ one, many }) => ({
   company: one(companies, {
     fields: [complianceTasks.companyId],
@@ -913,5 +948,16 @@ export const communicationLogsRelations = relations(communicationLogs, ({ one })
   company: one(companies, {
     fields: [communicationLogs.companyId],
     references: [companies.id],
+  }),
+}))
+
+export const scenarioNotesRelations = relations(scenarioNotes, ({ one }) => ({
+  company: one(companies, {
+    fields: [scenarioNotes.companyId],
+    references: [companies.id],
+  }),
+  scenario: one(scenarios, {
+    fields: [scenarioNotes.scenarioId],
+    references: [scenarios.id],
   }),
 }))

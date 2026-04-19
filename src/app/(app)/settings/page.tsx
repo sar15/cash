@@ -90,6 +90,8 @@ export default function SettingsPage() {
     name: '',
     pan: '',
     gstin: '',
+    cin: '',
+    registeredAddress: '',
     industry: '',
     fyStartMonth: 4,
     currency: 'INR',
@@ -123,6 +125,8 @@ export default function SettingsPage() {
       name: company.name,
       pan: company.pan ?? '',
       gstin: company.gstin ?? '',
+      cin: company.cin ?? '',
+      registeredAddress: company.registeredAddress ?? '',
       industry: company.industry,
       fyStartMonth: company.fyStartMonth,
       currency: company.currency,
@@ -224,6 +228,8 @@ export default function SettingsPage() {
         name: companyForm.name,
         pan: companyForm.pan || null,
         gstin: companyForm.gstin || null,
+        cin: companyForm.cin || null,
+        registeredAddress: companyForm.registeredAddress || null,
         industry: companyForm.industry,
         fyStartMonth: companyForm.fyStartMonth,
         currency: companyForm.currency,
@@ -361,6 +367,19 @@ export default function SettingsPage() {
               className="surface-input"
             />
           </FormField>
+          <FormField label="CIN (Corporate Identity Number)">
+            <input
+              id="settings-cin"
+              name="cin"
+              type="text"
+              autoComplete="off"
+              value={companyForm.cin}
+              onChange={(e) => setCompanyForm({ ...companyForm, cin: e.target.value.toUpperCase() })}
+              placeholder="U72200MH2020PTC123456"
+              maxLength={21}
+              className="surface-input"
+            />
+          </FormField>
           <FormField label="Financial Year Start">
             <select
               id="settings-fy-start"
@@ -388,6 +407,18 @@ export default function SettingsPage() {
             </select>
           </FormField>
         </div>
+        <FormField label="Registered Address">
+          <textarea
+            id="settings-registered-address"
+            name="registered-address"
+            value={companyForm.registeredAddress}
+            onChange={(e) => setCompanyForm({ ...companyForm, registeredAddress: e.target.value })}
+            placeholder="Full registered address as per MCA records"
+            rows={3}
+            maxLength={500}
+            className="surface-input resize-none"
+          />
+        </FormField>
       </SettingsSection>
 
       {/* Compliance Config */}

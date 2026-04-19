@@ -190,7 +190,7 @@ export function QuickMetricsGrid({
       {/* Row 2: Profitability metrics */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          label="Net Income"
+          label="PAT"
           value={formatAuto(netIncome)}
           explanation={incomeExplanation}
           tone={incomeTone}
