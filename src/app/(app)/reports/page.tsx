@@ -16,7 +16,7 @@ type ReportsTab = 'pdf' | 'annual'
 
 export default function ReportsPage() {
   const { company, companyId } = useCompanyContext()
-  const { engineResult, forecastMonths, isReady } = useCurrentForecast()
+  const { engineResult, isReady } = useCurrentForecast()
   const companyData = useCompanyStore((s) => s.activeCompany())
   const { user } = useUser()
 

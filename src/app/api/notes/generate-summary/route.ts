@@ -1,12 +1,11 @@
 import { type NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { scenarioNotes } from '@/lib/db/schema'
-import { and, eq, isNull } from 'drizzle-orm'
 import { jsonOk, jsonError, resolveAuthedCompany, isErrorResponse } from '@/lib/api/helpers'
 import { buildAutoSummary } from '@/lib/reports/auto-summary'
 import { aggregateAnnual } from '@/lib/reports/annual-aggregator'
 import { getForecastResult } from '@/lib/db/queries/forecast-results'
-import type { EngineResult } from '@/lib/engine'
+import type { ThreeWayMonth } from '@/lib/engine/three-way/builder'
 
 /**
  * POST /api/notes/generate-summary
@@ -96,8 +95,7 @@ export async function POST(request: NextRequest) {
             m.pl.profitAfterTax = (m.bs as Record<string, number>).retainedEarnings ?? 0
           })
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const annual = aggregateAnnual(rawMonths as any)
+          const annual = aggregateAnnual(rawMonths as unknown as ThreeWayMonth[])
           autoSummary = buildAutoSummary(statementType as 'PL' | 'BS' | 'CF', annual, null)
         }
       } catch (err) {

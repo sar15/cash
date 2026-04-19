@@ -11,7 +11,7 @@ import type { ThreeWayMonth } from '../../engine/three-way/builder'
  */
 describe('aggregateAnnual - P&L Round-trip Summation Property', () => {
   it('sums totalRevenue correctly across 12 months', () => {
-    const months: ThreeWayMonth[] = Array.from({ length: 12 }, (_, i) => ({
+    const months: ThreeWayMonth[] = Array.from({ length: 12 }, () => ({
       pl: {
         revenue: 100000,
         cogs: 50000,
@@ -120,7 +120,7 @@ describe('aggregateAnnual - P&L Round-trip Summation Property', () => {
   })
 
   it('sums profitAfterTax correctly across 12 months', () => {
-    const months: ThreeWayMonth[] = Array.from({ length: 12 }, (_, i) => ({
+    const months: ThreeWayMonth[] = Array.from({ length: 12 }, () => ({
       pl: {
         revenue: 100000,
         cogs: 50000,
@@ -810,7 +810,7 @@ describe('aggregateAnnual - Edge Cases', () => {
   })
 
   it('handles exactly 12 months correctly', () => {
-    const months: ThreeWayMonth[] = Array.from({ length: 12 }, (_, i) => ({
+    const months: ThreeWayMonth[] = Array.from({ length: 12 }, () => ({
       pl: {
         revenue: 100000,
         cogs: 50000,

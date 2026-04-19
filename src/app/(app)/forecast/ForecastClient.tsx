@@ -411,7 +411,6 @@ export default function ForecastClient() {
           {activeView === 'annual' ? (
             <AnnualView
               engineResult={engineResult}
-              forecastMonths={forecastMonths}
               companyId={companyId ?? ''}
               scenarioId={selectedScenarioId}
               company={company}

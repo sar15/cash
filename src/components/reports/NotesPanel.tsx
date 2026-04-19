@@ -13,7 +13,7 @@
  * - Stale warning when forecast changes
  */
 
-import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react'
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useUser } from '@clerk/nextjs'
 
@@ -24,7 +24,6 @@ export interface NotesPanelProps {
   periodKey: string
   userRole?: 'owner' | 'editor' | 'viewer'
   forecastUpdatedAt?: string | null
-  onBeforePDFExport?: () => Promise<void>
 }
 
 /** Ref handle exposed to parent for flushing pending saves before PDF export */
@@ -48,7 +47,6 @@ export const NotesPanel = forwardRef<NotesPanelHandle, NotesPanelProps>(function
   periodKey,
   userRole = 'viewer',
   forecastUpdatedAt,
-  onBeforePDFExport,
 }: NotesPanelProps, ref) {
   const { user } = useUser()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -87,20 +85,6 @@ export const NotesPanel = forwardRef<NotesPanelHandle, NotesPanelProps>(function
     getUserNotes: () => userNotesRef.current,
   }))
 
-  // Fetch notes on mount
-  useEffect(() => {
-    fetchNotes()
-  }, [companyId, scenarioId, statementType, periodKey])
-
-  // Auto-expand if notes exist
-  useEffect(() => {
-    if (notes && (notes.autoSummary.length > 0 || notes.userNotes.length > 0)) {
-      setIsExpanded(true)
-    }
-  }, [notes])
-
-  // Expose flush function for PDF export — handled via useImperativeHandle above
-
   const fetchNotes = async () => {
     setIsLoading(true)
     try {
@@ -129,6 +113,18 @@ export const NotesPanel = forwardRef<NotesPanelHandle, NotesPanelProps>(function
     }
   }
 
+  // Fetch notes on mount
+  useEffect(() => {
+    fetchNotes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, scenarioId, statementType, periodKey])
+
+  // Auto-expand if notes exist
+  useEffect(() => {
+    if (notes && (notes.autoSummary.length > 0 || notes.userNotes.length > 0)) {
+      setIsExpanded(true)
+    }
+  }, [notes])
   const saveNotesInternal = async (notesText: string) => {
     if (!canEdit) return
 
@@ -183,21 +179,11 @@ export const NotesPanel = forwardRef<NotesPanelHandle, NotesPanelProps>(function
   }
 
   const handleBlur = () => {
-    // Immediate save on blur
     if (debouncedSaveRef.current) {
       clearTimeout(debouncedSaveRef.current)
       debouncedSaveRef.current = null
     }
     saveNotesInternal(userNotesRef.current)
-  }
-
-  // Internal flush — also used by useImperativeHandle above
-  const flushPendingSaves = async () => {
-    if (debouncedSaveRef.current) {
-      clearTimeout(debouncedSaveRef.current)
-      debouncedSaveRef.current = null
-      await saveNotesInternal(userNotesRef.current)
-    }
   }
 
   const handleGenerateSummary = async () => {

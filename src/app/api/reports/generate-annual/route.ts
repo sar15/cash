@@ -10,6 +10,7 @@ import { generateAnnualPDFReport } from '@/lib/reports/annual-pdf-generator'
 import { generatePeriodKey } from '@/lib/utils/date-utils'
 import { handleRouteError, parseJsonBody } from '@/lib/server/api'
 import { parseMonthLabel } from '@/lib/forecast-periods'
+import type { ThreeWayMonth } from '@/lib/engine/three-way/builder'
 import { z } from 'zod'
 
 const schema = z.object({
@@ -64,8 +65,7 @@ export async function POST(request: NextRequest) {
     const { isCOGSAccount } = await import('@/lib/standards/account-classifier')
     const companyAccounts = await getAccountsForCompany(ctx.companyId)
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawMonths: any[] = forecastMonths.map((_: string, i: number) => ({
+    const rawMonths = forecastMonths.map((_: string, i: number) => ({
       pl: {
         revenueFromOps: 0, otherIncome: 0, totalRevenue: 0,
         cogs: 0, employeeBenefits: 0, financeCosts: 0,
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Aggregate current year
-    const currentYear = aggregateAnnual(rawMonths)
+    const currentYear = aggregateAnnual(rawMonths as unknown as ThreeWayMonth[])
 
     // Determine FY details — forecastMonths are stored as "Apr-25" labels
     const fyStartMonth = company.fyStartMonth ?? 4

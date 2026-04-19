@@ -102,7 +102,7 @@ export function AnnualBSStatement({
           {/* Shareholders' Funds */}
           <tr className="bg-[#F8FAFC]">
             <th scope="row" className="px-4 py-2 text-left text-xs font-bold uppercase tracking-[0.12em] text-[#94A3B8]">
-              Shareholders' Funds
+              Shareholders&apos; Funds
             </th>
             <td className="px-4 py-2"></td>
             {prior && <td className="px-4 py-2"></td>}
@@ -144,7 +144,7 @@ export function AnnualBSStatement({
 
           <tr className="border-t border-[#E2E8F0] bg-[#F8FAFC]">
             <th scope="row" className="px-4 py-2 text-left text-sm font-semibold text-[#334155]">
-              Total Shareholders' Funds
+              Total Shareholders&apos; Funds
             </th>
             <td className="px-4 py-2 text-right font-semibold text-[#334155]">
               {formatValue(current.totalShareholdersEquity)}

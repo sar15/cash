@@ -45,7 +45,6 @@ export const AnnualStatementView = forwardRef<AnnualStatementViewHandle, AnnualS
       priorPeriodKey,
       userRole = 'viewer',
       forecastUpdatedAt,
-      onNotesChange,
     },
     ref
   ) {

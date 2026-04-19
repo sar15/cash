@@ -218,7 +218,8 @@ describe('buildAutoSummary', () => {
 
   describe('Edge Cases', () => {
     it('returns empty array for invalid statement type', () => {
-      const bullets = buildAutoSummary('INVALID' as any, mockAnnualStatement, null)
+      // @ts-expect-error - Testing invalid input
+      const bullets = buildAutoSummary('INVALID', mockAnnualStatement, null)
 
       expect(bullets).toEqual([])
     })

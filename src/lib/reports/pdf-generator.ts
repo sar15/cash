@@ -236,7 +236,6 @@ export async function generatePDFReport(params: ReportParams): Promise<Buffer> {
   sectionHeader('Profit & Loss Statement (Schedule III)')
   tableHeader(forecastMonths)
 
-  const revenueAccounts = accounts.filter(a => a.accountType === 'revenue').sort((a, b) => a.sortOrder - b.sortOrder)
   const cogsAccounts = accounts.filter(a => isCOGSAccount(a)).sort((a, b) => a.sortOrder - b.sortOrder)
   const opexAccounts = accounts.filter(a => a.accountType === 'expense' && !isCOGSAccount(a)).sort((a, b) => a.sortOrder - b.sortOrder)
 
