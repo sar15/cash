@@ -28,7 +28,7 @@ export interface BalanceWarning {
   /** Month label e.g. 'Apr-25' (if available) */
   monthLabel?: string
   /** Which check failed */
-  check: 'bs_balance' | 'cf_cash' | 're_check'
+  check: 'bs_balance' | 'cf_cash' | 're_check' | 'engine_convergence' | 'recheck_mappings'
   /** Human-readable description */
   message: string
   /** Magnitude of the discrepancy in paise */

@@ -1,9 +1,21 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql, gte, lte } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
 
-export async function getActualsForCompany(companyId: string) {
+export async function getActualsForCompany(
+  companyId: string,
+  options?: { startPeriod?: string; endPeriod?: string }
+) {
+  const whereClauses = [eq(schema.monthlyActuals.companyId, companyId)]
+  
+  if (options?.startPeriod) {
+    whereClauses.push(gte(schema.monthlyActuals.period, options.startPeriod))
+  }
+  if (options?.endPeriod) {
+    whereClauses.push(lte(schema.monthlyActuals.period, options.endPeriod))
+  }
+
   return db.query.monthlyActuals.findMany({
-    where: eq(schema.monthlyActuals.companyId, companyId),
+    where: and(...whereClauses),
     orderBy: (actuals, { asc }) => [asc(actuals.period)],
   })
 }

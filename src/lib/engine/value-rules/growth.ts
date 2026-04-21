@@ -13,17 +13,11 @@ export const evaluateGrowth: ValueRuleEvaluator<GrowthConfig> = (config, context
   
   let currentValue = baseValue;
   for (let i = 0; i < forecastMonths; i++) {
-    // Add compound growth
+    // Add compound growth to the raw float value
     currentValue = currentValue * (1 + config.monthlyGrowthRate);
-    // Math.round preserves paise as integer
-    const roundedValue = Math.round(currentValue);
-    results.push(roundedValue);
     
-    // We base the next month's calculation on the exact float value before rounding
-    // to avoid rounding error compounding over time, BUT for simplicity and typical
-    // financial integer math, compounding the rounded value is also common.
-    // Given rule "all arithmetic in paise", perhaps it's better to compound the rounded paise value.
-    currentValue = roundedValue;
+    // Round for the results array (paise) but KEEP the float for the next iteration
+    results.push(Math.round(currentValue));
   }
 
   return results;

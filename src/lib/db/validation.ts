@@ -199,12 +199,12 @@ export const importSaveSchema = z.object({
     accountType: accountTypeEnum,
     standardMapping: standardMappingSchema,
     parentId: z.string().uuid().nullable().optional(),
-  })).min(1),
+  })).min(1).max(2000),
   actuals: z.array(z.object({
     accountName: z.string().min(1),
     period: z.string().regex(/^\d{4}-\d{2}-01$/),
     amount: z.number().int(),
-  })).min(1),
+  })).min(1).max(5000),
 })
 
 // ============================================================

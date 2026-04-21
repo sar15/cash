@@ -269,18 +269,20 @@ export async function POST(request: NextRequest) {
 
     // Mark forecast stale immediately so UI shows recalculating state
     // (Inngest job will set it back to 'ready' when done)
-    markForecastStale(company.id).catch(() => {})
+    await markForecastStale(company.id).catch(() => {})
 
-    // Audit log + notification (non-blocking)
-    writeAuditLog({
+    // Audit log + notification
+    await writeAuditLog({
       companyId: company.id,
       clerkUserId: userId,
       action: 'import.completed',
       entityType: 'import',
       newValue: { accounts: result.createdAccounts + result.updatedAccounts, actuals: result.savedActuals },
-    }).catch(() => {})
+    }).catch((err) => {
+      console.error('[AuditLog] Failed to write import.completed:', err)
+    })
 
-    createNotification({
+    await createNotification({
       companyId: company.id,
       clerkUserId: userId,
       type: 'import_complete',

@@ -1,6 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse, type NextRequest } from 'next/server'
-import { checkRateLimit, checkImportRateLimit, checkReportRateLimit, checkExportRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, checkImportRateLimit, checkReportRateLimit, checkExportRateLimit, checkPublicRateLimit } from '@/lib/rate-limit'
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -76,26 +76,28 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   }
 
   const { userId } = await auth()
+  const ip = request.headers.get('x-forwarded-for') ?? '127.0.0.1'
+
   if (userId) {
     const path = request.nextUrl.pathname
 
-    // Import upload: 10/hour per user (expensive — parses large files)
+    // Import upload: 10/hour per user
     if (path === '/api/import/upload' || path === '/api/import/seed-demo') {
       const { success } = await checkImportRateLimit(userId)
       if (!success) {
         return NextResponse.json(
-          { error: 'Too many import requests. Please wait before trying again.' },
+          { error: 'Too many import requests. Please wait.' },
           { status: 429 }
         )
       }
     }
 
-    // Report generation: 5/hour per user (CPU + storage intensive)
+    // Report generation: 5/hour per user
     if (path === '/api/reports/generate') {
       const { success } = await checkReportRateLimit(userId)
       if (!success) {
         return NextResponse.json(
-          { error: 'Too many report requests. Please wait before generating another report.' },
+          { error: 'Too many report requests. Please wait.' },
           { status: 429 }
         )
       }
@@ -106,7 +108,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
       const { success } = await checkExportRateLimit(userId)
       if (!success) {
         return NextResponse.json(
-          { error: 'Too many export requests. Please wait before exporting again.' },
+          { error: 'Too many export requests. Please wait.' },
           { status: 429 }
         )
       }
@@ -121,6 +123,15 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
           { status: 429 }
         )
       }
+    }
+  } else if (isApiRequest) {
+    // Rate limit public API requests (including health/webhooks) by IP
+    const { success } = await checkPublicRateLimit(ip)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Too many requests from this IP. Please slow down.' },
+        { status: 429 }
+      )
     }
   }
 

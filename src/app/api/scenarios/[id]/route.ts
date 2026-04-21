@@ -101,17 +101,19 @@ export async function PUT(
       }))
     )
 
-    // Audit log (non-blocking)
+    // Audit log
     const { userId } = await auth()
     if (userId) {
-      writeAuditLog({
+      await writeAuditLog({
         companyId: ctx.companyId,
         clerkUserId: userId,
         action: 'scenario.overrides.saved',
         entityType: 'scenario',
         entityId: id,
         newValue: { overridesCount: parsed.data.overrides.length },
-      }).catch(() => {})
+      }).catch((err) => {
+        console.error('[AuditLog] Failed to write scenario.overrides.saved:', err)
+      })
     }
 
     return jsonOk({ overrides })

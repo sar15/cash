@@ -416,6 +416,7 @@ export const forecastResults = sqliteTable(
     metrics: text('metrics').notNull().default('{}'),
     // 'ready' = safe to read/export | 'stale' = inputs changed, recompute pending | 'calculating' = Inngest job running
     status: text('status').notNull().default('ready'), // 'ready' | 'stale' | 'calculating'
+    calculatingStartedAt: text('calculating_started_at'),
     version: integer('version').default(1),
     createdAt: text('created_at').default(sql`(datetime('now'))`),
   },

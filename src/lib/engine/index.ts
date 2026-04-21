@@ -156,9 +156,11 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
 
   // 1. EVALUATE VALUE RULES per account
   // Multi-pass resolution handles accounts that reference other accounts (e.g. interest on debt).
-  // We run up to 3 passes — in practice 2 passes resolves all standard circular dependencies.
   const MAX_PASSES = 3
+  let hasChanges = false
+
   for (let pass = 0; pass < MAX_PASSES; pass++) {
+    hasChanges = false
     accounts.forEach((account) => {
       if (['Assets', 'Liabilities', 'Equity'].includes(account.category)) return
 
@@ -172,11 +174,10 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
       let forecast: number[]
 
       if (!rule) {
-        // Only fill zeros on first pass — preserve values from previous passes
         if (pass === 0) {
           forecast = Array(forecastLength).fill(0)
         } else {
-          return // keep existing value
+          return 
         }
       } else {
         switch (rule.type) {
@@ -197,11 +198,31 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
         }
       }
 
-      accountForecasts[account.id] = forecast.map((value) =>
+      const finalForecast = forecast.map((value) =>
         applyBaselineAdjustment(value, baselineAdjustments[account.id])
       )
+
+      // Track changes to detect convergence
+      const previous = accountForecasts[account.id]
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(finalForecast)) {
+        hasChanges = true
+        accountForecasts[account.id] = finalForecast
+      }
     })
+
+    // Short-circuit if we stabilized early
+    if (!hasChanges) break
   }
+
+  // Final convergence warning if it didn't stabilize after MAX_PASSES
+  const convergenceWarning: import('./three-way/builder').BalanceWarning[] = hasChanges
+    ? [{ 
+        monthIndex: 0,
+        check: 'engine_convergence', 
+        message: 'Engine did not converge: some accounts have unresolved dependencies after 3 passes. Check for complex circular logic.',
+        discrepancyPaise: 0 
+      }]
+    : []
 
   // 2. APPLY TIMING PROFILES → compute cash flows
   const cashInflows: Record<string, number[]> = {}
@@ -266,20 +287,35 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
   // 5. THREE-WAY INTEGRATION
   // PRIMARY: find cash/bank account by standardMapping (set during import mapping)
   // FALLBACK: name heuristics for legacy data — covers 'HDFC A/c 1234', 'Petty Cash Imprest', etc.
-  const cashAccount = accounts.find((a) =>
+  const cashAccountByMapping = accounts.find((a) =>
     a.category === 'Assets' && (
       a.standardMapping === SM_ASSET_CASH ||
       a.standardMapping === SM_ASSET_BANK_OTHER
     )
-  ) ?? accounts.find((a) =>
+  )
+  
+  const cashAccountByHeuristic = !cashAccountByMapping ? accounts.find((a) =>
     a.category === 'Assets' && (
       a.name.toLowerCase().includes('cash') ||
       a.name.toLowerCase().includes('bank') ||
       a.name.toLowerCase().includes('current account') ||
       a.name.toLowerCase().includes('savings account')
     )
-  )
+  ) : null
+
+  const cashAccount = cashAccountByMapping || cashAccountByHeuristic
   const openingCash = cashAccount?.historicalValues.at(-1) ?? 0
+
+  // Emit warning if we relied on heuristics for the core BS plug
+  const heuristicWarning: import('./three-way/builder').BalanceWarning[] = cashAccountByHeuristic
+    ? [{
+        monthIndex: 0,
+        check: 'recheck_mappings',
+        message: `Account "${cashAccountByHeuristic.name}" was automatically identified as your primary Cash/Bank account based on its name. Please verify this mapping in Settings for better accuracy.`,
+        discrepancyPaise: 0
+      }]
+    : []
+
   const opening: OpeningBalances = customOpening ?? {
     cash: openingCash,
     ar: 0,
@@ -306,9 +342,12 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
     complianceConfig,
   })
 
+  // Combine integration warnings with engine convergence and heuristic warnings
+  const allWarnings = [...balanceWarnings, ...convergenceWarning, ...heuristicWarning]
+
   // Log warnings in development — non-blocking
-  if (balanceWarnings.length > 0 && process.env.NODE_ENV !== 'production') {
-    console.warn('[Engine] Balance warnings:', balanceWarnings)
+  if (allWarnings.length > 0 && process.env.NODE_ENV !== 'production') {
+    console.warn('[Engine] Balance warnings:', allWarnings)
   }
 
   return {
@@ -318,6 +357,6 @@ export function runForecastEngine(options: ForecastEngineOptions): EngineResult 
     forecastMonths: forecastMonthLabels,
     compliance,
     salaryForecast,
-    balanceWarnings,
+    balanceWarnings: allWarnings,
   }
 }

@@ -60,6 +60,31 @@ function inMemoryRateLimit(identifier: string, limit: number, windowMs: number):
 }
 
 /**
+ * Rate limit for public/unauthenticated endpoints (IP-based)
+ * 30 requests per minute per IP
+ */
+export async function checkPublicRateLimit(ip: string): Promise<{ success: boolean }> {
+  if (distributedRateLimiter) {
+    try {
+      const limiter = new Ratelimit({
+        redis: redis!,
+        limiter: Ratelimit.slidingWindow(30, '1 m'),
+        analytics: true,
+        prefix: 'cashflowiq:public',
+      })
+      const result = await limiter.limit(ip)
+      return { success: result.success }
+    } catch (error) {
+      console.error('[RateLimit] Upstash error for public route:', error)
+    }
+  }
+
+  // Fallback
+  const success = inMemoryRateLimit(`public:${ip}`, 30, 60000)
+  return { success }
+}
+
+/**
  * Check rate limit for a given identifier (usually userId)
  * Returns { success: true } if request is allowed
  * Returns { success: false } if rate limit exceeded

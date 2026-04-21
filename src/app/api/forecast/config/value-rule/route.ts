@@ -33,10 +33,10 @@ export async function PATCH(request: NextRequest) {
     })
 
     // Mark forecast stale immediately so UI can show recalculating state
-    markForecastStale(company.id).catch(() => {})
+    await markForecastStale(company.id).catch(() => {})
 
-    // Write audit log (non-blocking)
-    writeAuditLog({
+    // Write audit log
+    await writeAuditLog({
       companyId: company.id,
       clerkUserId: userId,
       action: 'value_rule.updated',
@@ -44,9 +44,11 @@ export async function PATCH(request: NextRequest) {
       entityId: body.accountId,
       oldValue: oldRule ? { ruleType: oldRule.ruleType, config: oldRule.config } : null,
       newValue: { ruleType: body.ruleType, config: body.config },
-    }).catch(() => {})
+    }).catch((err) => {
+      console.error('[AuditLog] Failed to write value_rule.updated:', err)
+    })
 
-    // Create notification
+    // Create notification (non-blocking)
     createNotification({
       companyId: company.id,
       clerkUserId: userId,

@@ -27,17 +27,19 @@ export async function PATCH(request: NextRequest) {
     })
 
     // Mark forecast stale immediately so UI can show recalculating state
-    markForecastStale(company.id).catch(() => {})
+    await markForecastStale(company.id).catch(() => {})
 
-    // Audit log (non-blocking)
-    writeAuditLog({
+    // Audit log
+    await writeAuditLog({
       companyId: company.id,
       clerkUserId: userId,
       action: 'timing_profile.updated',
       entityType: 'timing_profile',
       entityId: body.name,
       newValue: { profileType: body.profileType, config: body.config },
-    }).catch(() => {})
+    }).catch((err) => {
+      console.error('[AuditLog] Failed to write timing_profile.updated:', err)
+    })
 
     // Trigger background recompute
     inngest.send({

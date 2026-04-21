@@ -2,20 +2,36 @@ import { eq, and, isNull } from 'drizzle-orm'
 import { db, schema } from '@/lib/db'
 
 export async function getForecastResult(companyId: string, scenarioId?: string | null) {
-  if (scenarioId) {
-    return db.query.forecastResults.findFirst({
-      where: and(
-        eq(schema.forecastResults.companyId, companyId),
-        eq(schema.forecastResults.scenarioId, scenarioId)
-      ),
-    })
+  const result = await (scenarioId
+    ? db.query.forecastResults.findFirst({
+        where: and(
+          eq(schema.forecastResults.companyId, companyId),
+          eq(schema.forecastResults.scenarioId, scenarioId)
+        ),
+      })
+    : db.query.forecastResults.findFirst({
+        where: and(
+          eq(schema.forecastResults.companyId, companyId),
+          isNull(schema.forecastResults.scenarioId)
+        ),
+      }))
+
+  if (!result) return null
+
+  // STALE DETECTION: If a job has been 'calculating' for more than 5 minutes,
+  // it likely crashed or timed out in Inngest. Treat it as 'stale' so the UI
+  // can trigger a re-run instead of being stuck.
+  if (result.status === 'calculating' && result.calculatingStartedAt) {
+    const started = new Date(result.calculatingStartedAt).getTime()
+    const now = new Date().getTime()
+    const fiveMinutes = 5 * 60 * 1000
+
+    if (now - started > fiveMinutes) {
+      return { ...result, status: 'stale' }
+    }
   }
-  return db.query.forecastResults.findFirst({
-    where: and(
-      eq(schema.forecastResults.companyId, companyId),
-      isNull(schema.forecastResults.scenarioId)
-    ),
-  })
+
+  return result
 }
 
 export async function upsertForecastResult(
@@ -25,13 +41,14 @@ export async function upsertForecastResult(
   // Single atomic upsert — deterministic ID avoids race conditions on nullable scenarioId
   const stableId = `${companyId}:${data.scenarioId ?? 'baseline'}`
 
-  const [result] = await db
+  const result = await db
     .insert(schema.forecastResults)
     .values({
       id: stableId,
       companyId,
       ...data,
       status: 'ready',
+      calculatingStartedAt: null,
       version: 1,
       createdAt: new Date().toISOString(),
     })
@@ -44,11 +61,12 @@ export async function upsertForecastResult(
         compliance: data.compliance,
         metrics: data.metrics,
         status: 'ready',
+        calculatingStartedAt: null,
         createdAt: new Date().toISOString(),
       },
     })
     .returning()
-  return result
+  return result[0]
 }
 
 /**
@@ -59,7 +77,7 @@ export async function markForecastStale(companyId: string, scenarioId?: string |
   const stableId = `${companyId}:${scenarioId ?? 'baseline'}`
   await db
     .update(schema.forecastResults)
-    .set({ status: 'stale' })
+    .set({ status: 'stale', calculatingStartedAt: null })
     .where(eq(schema.forecastResults.id, stableId))
 }
 
@@ -70,7 +88,10 @@ export async function markForecastCalculating(companyId: string, scenarioId?: st
   const stableId = `${companyId}:${scenarioId ?? 'baseline'}`
   await db
     .update(schema.forecastResults)
-    .set({ status: 'calculating' })
+    .set({ 
+      status: 'calculating', 
+      calculatingStartedAt: new Date().toISOString() 
+    })
     .where(eq(schema.forecastResults.id, stableId))
 }
 

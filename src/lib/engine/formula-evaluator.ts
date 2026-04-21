@@ -188,7 +188,12 @@ export function evaluateFormulaValues(
   formula: CustomFormula,
   engineResult: EngineResult
 ): number[] {
-  return evaluateFormula(formula, engineResult).map(r => r.value)
+  return evaluateFormula(formula, engineResult).map(r => {
+    if (r.warning && process.env.NODE_ENV !== 'production') {
+      console.warn(`[FormulaEvaluator] Warning evaluating "${formula.name}": ${r.warning}`)
+    }
+    return r.value
+  })
 }
 
 /**
